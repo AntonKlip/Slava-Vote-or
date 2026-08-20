@@ -1,0 +1,102 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  USER
+  MODERATOR
+  ADMIN
+}
+
+enum VotingStatus {
+  DRAFT
+  VIEWING
+  VOTING
+  FINISHED
+}
+
+enum PhotoStatus {
+  ACTIVE
+  DELETED
+}
+
+model User {
+  id         String   @id @default(cuid())
+  telegramId BigInt   @unique
+  username   String?
+  firstName  String?
+  lastName   String?
+  role       UserRole @default(USER)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  votes              Vote[]
+  votingPermission   VotingPermission?  @relation("UserPermission")
+  grantedPermissions VotingPermission[] @relation("GrantedByUser")
+}
+
+model Photo {
+  id                   String      @id @default(cuid())
+  telegramFileId       String
+  telegramFileUniqueId String
+  name                 String
+  status               PhotoStatus @default(ACTIVE)
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+
+  votes Vote[]
+
+  @@index([telegramFileUniqueId])
+}
+
+model Nomination {
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+  sortOrder   Int     @default(0)
+  active      Boolean @default(true)
+
+  votes Vote[]
+}
+
+model Vote {
+  id           String   @id @default(cuid())
+  userId       String
+  photoId      String
+  nominationId String
+  createdAt    DateTime @default(now())
+
+  user       User       @relation(fields: [userId], references: [id])
+  photo      Photo      @relation(fields: [photoId], references: [id])
+  nomination Nomination @relation(fields: [nominationId], references: [id])
+
+  @@unique([userId, photoId, nominationId])
+  @@index([nominationId, photoId])
+  @@index([userId])
+}
+
+model VotingPermission {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  grantedBy String
+  createdAt DateTime @default(now())
+
+  user          User @relation("UserPermission", fields: [userId], references: [id])
+  grantedByUser User @relation("GrantedByUser", fields: [grantedBy], references: [id])
+}
+
+model VotingState {
+  id               String       @id @default(cuid())
+  status           VotingStatus @default(DRAFT)
+  createdAt        DateTime     @default(now())
+  votingStartedAt  DateTime?
+  votingFinishedAt DateTime?
+}

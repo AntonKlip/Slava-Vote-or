@@ -3,3 +3,12 @@ dist/
 .env
 *.log
 .DS_Store
+
+/src/generated/prisma
+
+# AI-agent reference docs auto-installed by `prisma init` (Prisma 7) —
+# duplicated 3x across tools, not needed in version control
+/.agents/
+/.claude/
+/.windsurf/
+/skills-lock.json

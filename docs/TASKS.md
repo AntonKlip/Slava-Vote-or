@@ -9,7 +9,7 @@
 | Фаза | Название | Статус |
 | --- | --- | --- |
 | 0 | Project foundation | ✅ Done |
-| 2 | Database (Prisma schema) | 🔜 Ready — схема согласована в [DECISIONS.md](./DECISIONS.md) D8–D13, файл ещё не создан |
+| 2 | Database (Prisma schema) | ✅ Done (schema + schema-only проверки) — ждёт T2.12 (реальная миграция, действие пользователя) |
 | 3 | Users / RBAC | ⏳ Todo |
 | 4 | Voting state machine | ⏳ Todo |
 | 5 | Voting access (`canVote`) + атомарность | ⏳ Todo |
@@ -40,24 +40,22 @@
 
 ---
 
-## Phase 2 — Database (Prisma schema) 🔜 Ready
+## Phase 2 — Database (Prisma schema) ✅ Done (кроме T2.12)
 
-Ничего из этой фазы ещё не создано в репозитории (`prisma/schema.prisma` не существует) — только согласовано в чате и зафиксировано в DECISIONS.md D8–D13. Ждёт ревью списка задач пользователем перед стартом (текущий запрос).
-
-| ID | Задача | Зависит от | Приёмочные критерии |
-| --- | --- | --- | --- |
-| T2.1 | `npx prisma init --datasource-provider postgresql` | T0.4 | `prisma/schema.prisma` создан, `datasource db` читает `DATABASE_URL` из env |
-| T2.2 | Описать enum'ы `UserRole`, `VotingStatus`, `PhotoStatus` | T2.1 | значения строго как в PRODUCT_SPEC.md / DECISIONS.md D8 |
-| T2.3 | Модель `User` (`telegramId` unique, `role`, timestamps) | T2.1 | `prisma validate` проходит; `telegramId` — единственный уникальный идентификатор |
-| T2.4 | Модель `Photo` (глобальная, без FK на что-либо) | T2.1 | `telegramFileUniqueId` индексирован, не unique (D10); `status` soft-delete enum |
-| T2.5 | Модель `Nomination` (глобальная) | T2.1 | без `contestId`, поля по PRODUCT_SPEC.md |
-| T2.6 | Модель `Vote` (`userId`+`photoId`+`nominationId`) | T2.3–T2.5 | `@@unique([userId, photoId, nominationId])`; **нет** `@@unique([userId, nominationId])` (D13); индекс `[nominationId, photoId]` |
-| T2.7 | Модель `VotingPermission` (per-user) | T2.3 | `userId` unique, `grantedBy` → `User` (D11) |
-| T2.8 | Модель `VotingState` (одна строка статуса) | T2.1 | поля `status`, `votingStartedAt`, `votingFinishedAt`; без каскадов нигде (D12) |
-| T2.9 | Schema-only проверки: `prisma format`, `prisma validate`, `prisma generate` | T2.2–T2.8 | все три команды завершаются без ошибок, без подключения к реальной БД |
-| T2.10 | `npm run typecheck` / `npm run build` после генерации клиента | T2.9 | оба проходят без ошибок |
-| T2.11 | Коммит `prisma/schema.prisma` + скаффолдинг `prisma/` | T2.10 | запушено в `main` |
-| T2.12 | **Передача пользователю**: заполнить `DATABASE_URL` в локальном `.env`, запустить `npm run prisma:migrate` (`prisma migrate dev --name init`) | T2.11 | пользователь подтверждает успешный прогон миграции против Neon (или присылает текст ошибки для разбора); Claude не видит `DATABASE_URL` (D6) |
+| ID | Задача | Зависит от | Статус | Приёмочные критерии |
+| --- | --- | --- | --- | --- |
+| T2.1 | `npx prisma init --datasource-provider postgresql` | T0.4 | ✅ | `prisma/schema.prisma` создан (URL теперь через `prisma.config.ts`, см. DECISIONS.md D14) |
+| T2.2 | Описать enum'ы `UserRole`, `VotingStatus`, `PhotoStatus` | T2.1 | ✅ | значения строго как в PRODUCT_SPEC.md / DECISIONS.md D8 |
+| T2.3 | Модель `User` (`telegramId` unique, `role`, timestamps) | T2.1 | ✅ | `prisma validate` проходит; `telegramId` — единственный уникальный идентификатор |
+| T2.4 | Модель `Photo` (глобальная, без FK на что-либо) | T2.1 | ✅ | `telegramFileUniqueId` индексирован, не unique (D10); `status` soft-delete enum |
+| T2.5 | Модель `Nomination` (глобальная) | T2.1 | ✅ | без `contestId`, поля по PRODUCT_SPEC.md |
+| T2.6 | Модель `Vote` (`userId`+`photoId`+`nominationId`) | T2.3–T2.5 | ✅ | `@@unique([userId, photoId, nominationId])`; **нет** `@@unique([userId, nominationId])` (D13); индекс `[nominationId, photoId]` |
+| T2.7 | Модель `VotingPermission` (per-user) | T2.3 | ✅ | `userId` unique, `grantedBy` → `User` (D11) |
+| T2.8 | Модель `VotingState` (одна строка статуса) | T2.1 | ✅ | поля `status`, `votingStartedAt`, `votingFinishedAt`; без каскадов нигде (D12) |
+| T2.9 | Schema-only проверки: `prisma format`, `prisma validate`, `prisma generate` | T2.2–T2.8 | ✅ | все три команды завершились без ошибок, без подключения к реальной БД |
+| T2.10 | `npm run typecheck` / `npm run build` + lint после генерации клиента | T2.9 | ✅ | typecheck/build/lint проходят; `postinstall: prisma generate` добавлен, `src/generated/` исключён из ESLint |
+| T2.11 | Коммит `prisma/schema.prisma` + скаффолдинг `prisma/` | T2.10 | ✅ | запушено в `main` |
+| T2.12 | **Передача пользователю**: заполнить `DATABASE_URL` в локальном `.env`, запустить `npm run prisma:migrate` (`prisma migrate dev --name init`) | T2.11 | ⏳ | пользователь подтверждает успешный прогон миграции против Neon (или присылает текст ошибки для разбора); Claude не видит `DATABASE_URL` (D6) |
 
 ---
 

@@ -76,7 +76,9 @@ VotingState  (одна строка на всё приложение: DRAFT/VIEW
 
 Никаких `onDelete: Cascade` — сознательно (см. DECISIONS.md D12): soft delete — единственный способ "удалить" фото, история голосов не должна пострадать от каскада.
 
-Полная Prisma-схема появится в `prisma/schema.prisma` на этапе Phase 2 (см. TASKS.md T2.x); черновик схемы согласован в чате и зафиксирован в DECISIONS.md D8–D13.
+Схема реализована в `prisma/schema.prisma` (Phase 2, см. TASKS.md T2.x). Установленная версия Prisma (7.9.1) сама задаёт две детали иначе, чем в первоначальном черновике — см. DECISIONS.md D14:
+- клиент генерируется в `src/generated/prisma` (не в `node_modules`), в `.gitignore`;
+- `DATABASE_URL` читается через `prisma.config.ts`, а не напрямую из `datasource.url` в схеме.
 
 ## Security-принципы
 
