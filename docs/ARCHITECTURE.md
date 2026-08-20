@@ -51,7 +51,7 @@ prisma/
 └── schema.prisma
 ```
 
-Реализовано на данный момент (после Phase 5): `config/`, `database/prisma.ts`, `bot/context.ts`, `middleware/permissions.ts`, `bot/handlers/start.handler.ts`, `bot/commands/{voting-state,voting-permission}.commands.ts`, `services/{user,voting-state,voting-permission,voting}.service.ts`, `index.ts` (регистрирует все команды). `services/photo.service.ts`, `services/nomination.service.ts`, `services/results.service.ts`, `api/`, `frontend/` — появятся в Phase 6/7, см. [TASKS.md](./TASKS.md).
+Реализовано на данный момент (после Phase 6, T6.1–T6.5): `config/`, `database/prisma.ts`, `bot/context.ts`, `middleware/permissions.ts`, `bot/handlers/{start,photo-add}.handler.ts`, `bot/commands/{voting-state,voting-permission,nomination,photo}.commands.ts`, `services/{user,voting-state,voting-permission,voting,photo,nomination}.service.ts`, `index.ts` (регистрирует все команды). `services/results.service.ts`, `api/`, `frontend/` — появятся в Phase 7, см. [TASKS.md](./TASKS.md).
 
 С Phase 7 (Telegram Mini App, см. DECISIONS.md D19–D25) поверх этих же `services/` появится HTTP API-слой (`src/api/`, Express) и отдельный фронтенд (`frontend/`, React+Vite), работающие в том же Node-процессе, что и бот. Бот остаётся точкой входа и интерфейсом администратора; подробности — в DECISIONS.md.
 
