@@ -9,7 +9,7 @@
 | Фаза | Название | Статус |
 | --- | --- | --- |
 | 0 | Project foundation | ✅ Done |
-| 2 | Database (Prisma schema) | ✅ Done (schema + schema-only проверки) — ждёт T2.12 (реальная миграция, действие пользователя) |
+| 2 | Database (Prisma schema) | ✅ Done — миграция применена к Neon |
 | 3 | Users / RBAC | ⏳ Todo |
 | 4 | Voting state machine | ⏳ Todo |
 | 5 | Voting access (`canVote`) + атомарность | ⏳ Todo |
@@ -40,7 +40,7 @@
 
 ---
 
-## Phase 2 — Database (Prisma schema) ✅ Done (кроме T2.12)
+## Phase 2 — Database (Prisma schema) ✅ Done
 
 | ID | Задача | Зависит от | Статус | Приёмочные критерии |
 | --- | --- | --- | --- | --- |
@@ -55,7 +55,7 @@
 | T2.9 | Schema-only проверки: `prisma format`, `prisma validate`, `prisma generate` | T2.2–T2.8 | ✅ | все три команды завершились без ошибок, без подключения к реальной БД |
 | T2.10 | `npm run typecheck` / `npm run build` + lint после генерации клиента | T2.9 | ✅ | typecheck/build/lint проходят; `postinstall: prisma generate` добавлен, `src/generated/` исключён из ESLint |
 | T2.11 | Коммит `prisma/schema.prisma` + скаффолдинг `prisma/` | T2.10 | ✅ | запушено в `main` |
-| T2.12 | **Передача пользователю**: заполнить `DATABASE_URL` в локальном `.env`, запустить `npm run prisma:migrate` (`prisma migrate dev --name init`) | T2.11 | ⏳ | пользователь подтверждает успешный прогон миграции против Neon (или присылает текст ошибки для разбора); Claude не видит `DATABASE_URL` (D6) |
+| T2.12 | Применить миграцию `init` к Neon | T2.11 | ✅ | `20260820192542_init` применена, `npm run typecheck`/`lint` проходят после миграции. Отступление от D6: пользователь вставил реальный `DATABASE_URL` прямо в чат, а не только в свой `.env` — см. DECISIONS.md D15 |
 
 ---
 
