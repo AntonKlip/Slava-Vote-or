@@ -38,6 +38,13 @@ Node.js, TypeScript, [grammY](https://grammy.dev), PostgreSQL, Prisma.
 | `npm test` | тесты (Vitest) |
 | `npm run prisma:migrate` | применение Prisma-миграций |
 
+## Документация
+
+- [docs/PRODUCT_SPEC.md](./docs/PRODUCT_SPEC.md) — продуктовые правила, роли, что намеренно не определено (TBD)
+- [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) — стек, структура, модель данных, security-принципы
+- [docs/DECISIONS.md](./docs/DECISIONS.md) — журнал решений с обоснованиями
+- [docs/TASKS.md](./docs/TASKS.md) — план задач по фазам, статусы, приёмочные критерии
+
 ## Статус проекта
 
-Проект разрабатывается поэтапно. Текущий этап — Phase 0 (инфраструктура и tooling), схема БД и бизнес-логика ещё не реализованы.
+Проект разрабатывается поэтапно. Phase 0 (инфраструктура и tooling) завершена. Текущий этап — Phase 2 (Prisma-схема), см. [docs/TASKS.md](./docs/TASKS.md).
