@@ -10,6 +10,7 @@ import {
   handleStopVoting,
 } from './bot/commands/voting-state.commands.js';
 import { handleGrantAccess, handleRevokeAccess } from './bot/commands/voting-permission.commands.js';
+import { handleAddPhoto } from './bot/handlers/photo-add.handler.js';
 
 const bot = new Bot<MyContext>(config.botToken);
 
@@ -21,6 +22,7 @@ bot.command('start_voting', requireRole(UserRole.ADMIN), handleStartVoting);
 bot.command('stop_voting', requireRole(UserRole.ADMIN), handleStopVoting);
 bot.command('grant_access', requireRole(UserRole.ADMIN), handleGrantAccess);
 bot.command('revoke_access', requireRole(UserRole.ADMIN), handleRevokeAccess);
+bot.on('message:photo', requireRole(UserRole.ADMIN), handleAddPhoto);
 
 bot.catch((err) => {
   console.error('Bot error:', err);
