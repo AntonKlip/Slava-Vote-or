@@ -18,7 +18,7 @@
 | 3 | Users / RBAC | ✅ Done |
 | 4 | Voting state machine | ✅ Done |
 | 5 | Voting access (`canVote`) + атомарность | ✅ Done |
-| 6 | Управление фото и номинациями | ⏳ Todo |
+| 6 | Управление фото и номинациями | 🔜 T6.1–T6.5 done, осталась ручная проверка (см. ниже) |
 | 7 | Telegram Mini App | ⏳ Todo |
 | — | Backlog / TBD | 🧊 |
 
@@ -103,7 +103,7 @@
 
 Тесты бьют напрямую в реальный Neon (нет тестовой БД, см. D4) и используют отрицательные `telegramId` для тестовых пользователей (реальные Telegram id всегда положительные — коллизий не бывает), с гарантированной очисткой после себя (`afterAll`/`try…finally`). `vitest.config.ts` отключает параллелизм файлов (`fileParallelism: false`), так как несколько файлов тестов делят одну и ту же singleton-строку `VotingState`. Тестовые файлы исключены из продакшен-сборки через новый `tsconfig.build.json` (`npm run build` теперь использует его вместо `tsconfig.json`, чтобы в `dist/` не попадали `*.test.js`); `npm run typecheck` по-прежнему проверяет тесты через основной `tsconfig.json`.
 
-## Phase 6 — Управление фото и номинациями ⏳ Todo
+## Phase 6 — Управление фото и номинациями 🔜 T6.1–T6.5 done, ручная проверка не завершена
 
 Новая фаза — этой возможности не было ни в одной прошлой фазе (обнаружено при подготовке миграции на Mini App, см. DECISIONS.md D19). Разбивка задач и найденные при планировании отклонения от изначального списка — см. DECISIONS.md D31.
 
@@ -123,6 +123,21 @@
 Реализация T6.3: `src/bot/handlers/photo-add.handler.ts` (`handleAddPhoto`), регистрация `bot.on('message:photo', requireRole(ADMIN), handleAddPhoto)` в `src/index.ts`. Без отдельного unit-теста хендлера — как и в Phase 4/5, тестируется только сервисный слой (T6.1); ручная проверка через `npm run dev` — перед финальной приёмкой Phase 6. `typecheck`/`lint`/`build` чисты.
 
 Реализация T6.4/T6.5: `src/bot/commands/nomination.commands.ts` (`handleAddNomination`, `handleListNominations`, `handleDeactivateNomination`), `src/bot/commands/photo.commands.ts` (`handleListPhotos`, `handleDeletePhoto`), регистрация всех пяти команд в `src/index.ts` под `requireRole(ADMIN)`. Несуществующий `id` в `deactivate_nomination`/`delete_photo` отлавливается через `Prisma.PrismaClientKnownRequestError` (код `P2025`) и превращается в понятное сообщение, а не падает исключением. Без отдельных unit-тестов хендлеров (см. T6.3) — сервисный слой уже покрыт (T6.1/T6.2); ручная проверка — перед финальной приёмкой Phase 6. `typecheck`/`lint`/`build`/`npm test` (40/40) чисты.
+
+`Photo.id`/`Nomination.id` заменены с cuid на `Int autoincrement` по итогам ручной проверки (cuid неудобно вводить вручную) — см. DECISIONS.md D32, миграция `20260820215416_simple_int_ids_photo_nomination` применена к Neon.
+
+### Статус на конец сессии 2026-08-20 — что осталось перед закрытием Phase 6
+
+Код T6.1–T6.5 полностью реализован, протестирован (`typecheck`/`lint`/`build`/`npm test` 40/40 — все чисто) и закоммичен в `main` (6 локальных коммитов, **ещё не запушены** в `origin/main` — решение о `git push` не принято).
+
+Ручной чек-лист (см. план `phase-6-rosy-lecun.md`, раздел "Проверка") выполнен частично:
+- ✅ ADMIN добавил фото ("Антонио") и номинацию ("Лучшая улыбка") через bot-flow — сработало.
+- ⏳ **Не проверено**: реакция на команды/фото от обычного (не-ADMIN) пользователя — должен получать отказ "У вас нет доступа к этому действию." Пользователь явно сказал, что проверит позже.
+- ⏳ Не проверено: `/delete_photo <id>` и `/deactivate_nomination <id>` с новыми числовыми id (после миграции D32) — сервисный слой покрыт тестами, но сам bot-flow вживую с числовыми id ещё не гоняли.
+
+T6.6 (опциональный доп. прогон) — не требуется, пока ручная проверка не покажет пробел.
+
+Следующие шаги: (1) завершить ручную проверку (в т.ч. отказ для не-ADMIN), (2) при необходимости — T6.6, (3) решить про `git push`, (4) после этого Phase 6 можно пометить ✅ Done и переходить к Phase 7 (см. DECISIONS.md D19: по одной фазе за раз).
 
 ## Phase 7 — Telegram Mini App ⏳ Todo
 
