@@ -19,6 +19,6 @@ function parseAdminIds(raw: string | undefined): number[] {
 
 export const config = {
   botToken: required('BOT_TOKEN'),
-  databaseUrl: process.env.DATABASE_URL ?? '',
+  databaseUrl: required('DATABASE_URL'),
   adminTelegramIds: parseAdminIds(process.env.ADMIN_TELEGRAM_IDS),
 };

@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | 0 | Project foundation | ✅ Done |
 | 2 | Database (Prisma schema) | ✅ Done — миграция применена к Neon |
-| 3 | Users / RBAC | ⏳ Todo |
+| 3 | Users / RBAC | ✅ Done |
 | 4 | Voting state machine | ⏳ Todo |
 | 5 | Voting access (`canVote`) + атомарность | ⏳ Todo |
 | 6 | Tests | ⏳ Todo |
@@ -59,14 +59,16 @@
 
 ---
 
-## Phase 3 — Users / RBAC ⏳ Todo
+## Phase 3 — Users / RBAC ✅ Done
 
-| ID | Задача | Зависит от | Приёмочные критерии |
-| --- | --- | --- | --- |
-| T3.1 | `user.service.ts`: upsert по `telegramId` | T2.3, T2.12 | повторный `/start` того же `telegram_id` не создаёт дубликат |
-| T3.2 | Bootstrap первого ADMIN через `ADMIN_TELEGRAM_IDS` | T3.1 | пользователь с `telegram_id` из списка получает `role = ADMIN` при первом `/start` |
-| T3.3 | `/start` handler использует `user.service` (замена текущей заглушки) | T3.1 | handler не содержит бизнес-логику, только вызов сервиса |
-| T3.4 | `middleware/permissions.ts` — серверная проверка роли | T3.1 | USER не может выполнить moderator/admin-действие даже прямым callback-запросом |
+| ID | Задача | Зависит от | Приёмочные критерии | Статус |
+| --- | --- | --- | --- | --- |
+| T3.1 | `user.service.ts`: upsert по `telegramId` | T2.3, T2.12 | повторный `/start` того же `telegram_id` не создаёт дубликат | ✅ |
+| T3.2 | Bootstrap первого ADMIN через `ADMIN_TELEGRAM_IDS` | T3.1 | пользователь с `telegram_id` из списка получает `role = ADMIN` при первом `/start` | ✅ |
+| T3.3 | `/start` handler использует `user.service` (замена текущей заглушки) | T3.1 | handler не содержит бизнес-логику, только вызов сервиса | ✅ |
+| T3.4 | `middleware/permissions.ts` — серверная проверка роли | T3.1 | USER не может выполнить moderator/admin-действие даже прямым callback-запросом | ✅ (`requireRole`, задействуется в Phase 4) |
+
+Реализация: `src/database/prisma.ts` (синглтон Prisma Client с driver adapter `@prisma/adapter-pg`, обязателен в Prisma 7 для Postgres), `src/services/user.service.ts`, `src/bot/context.ts` (типизированный `MyContext` с `ctx.dbUser`), `src/middleware/permissions.ts` (`attachDbUser`, `requireRole`), `src/bot/handlers/start.handler.ts`. `config.databaseUrl` стал обязательной переменной (раньше был опциональным fallback на `''`). Проверено: `typecheck`/`lint`/`build` чисто, реальное подключение к Neon подтверждено (`prisma.user.count()` вернул 0).
 
 ## Phase 4 — Voting state machine ⏳ Todo
 
