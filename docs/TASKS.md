@@ -11,7 +11,7 @@
 | 0 | Project foundation | ✅ Done |
 | 2 | Database (Prisma schema) | ✅ Done — миграция применена к Neon |
 | 3 | Users / RBAC | ✅ Done |
-| 4 | Voting state machine | ⏳ Todo |
+| 4 | Voting state machine | ✅ Done |
 | 5 | Voting access (`canVote`) + атомарность | ⏳ Todo |
 | 6 | Tests | ⏳ Todo |
 | — | Backlog / TBD | 🧊 |
@@ -66,19 +66,21 @@
 | T3.1 | `user.service.ts`: upsert по `telegramId` | T2.3, T2.12 | повторный `/start` того же `telegram_id` не создаёт дубликат | ✅ |
 | T3.2 | Bootstrap первого ADMIN через `ADMIN_TELEGRAM_IDS` | T3.1 | пользователь с `telegram_id` из списка получает `role = ADMIN` при первом `/start` | ✅ |
 | T3.3 | `/start` handler использует `user.service` (замена текущей заглушки) | T3.1 | handler не содержит бизнес-логику, только вызов сервиса | ✅ |
-| T3.4 | `middleware/permissions.ts` — серверная проверка роли | T3.1 | USER не может выполнить moderator/admin-действие даже прямым callback-запросом | ✅ (`requireRole`, задействуется в Phase 4) |
+| T3.4 | `middleware/permissions.ts` — серверная проверка роли | T3.1 | USER не может выполнить admin-действие даже прямым callback-запросом | ✅ (`requireRole`, задействуется в Phase 4) |
 
 Реализация: `src/database/prisma.ts` (синглтон Prisma Client с driver adapter `@prisma/adapter-pg`, обязателен в Prisma 7 для Postgres), `src/services/user.service.ts`, `src/bot/context.ts` (типизированный `MyContext` с `ctx.dbUser`), `src/middleware/permissions.ts` (`attachDbUser`, `requireRole`), `src/bot/handlers/start.handler.ts`. `config.databaseUrl` стал обязательной переменной (раньше был опциональным fallback на `''`). Проверено: `typecheck`/`lint`/`build` чисто, реальное подключение к Neon подтверждено (`prisma.user.count()` вернул 0).
 
-## Phase 4 — Voting state machine ⏳ Todo
+## Phase 4 — Voting state machine ✅ Done
 
 (было "Contest state machine" в исходном плане — переименовано, см. DECISIONS.md D8/D9.)
 
-| ID | Задача | Зависит от | Приёмочные критерии |
-| --- | --- | --- | --- |
-| T4.1 | `voting-state.service.ts`: получение/создание единственной строки `VotingState` | T2.8, T2.12 | вызов при отсутствии строки создаёт ровно одну; повторный вызов не создаёт вторую |
-| T4.2 | Функция перехода состояния с картой разрешённых переходов (`DRAFT→VIEWING→VOTING→FINISHED`) | T4.1 | переходы `FINISHED→VOTING`, `FINISHED→VIEWING`, повторный запуск/остановка — отклоняются на сервере |
-| T4.3 | Команды модератора для запуска/остановки голосования | T4.2, T3.4 | доступно только MODERATOR/ADMIN; при запуске пишется `votingStartedAt`, при остановке — `votingFinishedAt` |
+| ID | Задача | Зависит от | Приёмочные критерии | Статус |
+| --- | --- | --- | --- | --- |
+| T4.1 | `voting-state.service.ts`: получение/создание единственной строки `VotingState` | T2.8, T2.12 | вызов при отсутствии строки создаёт ровно одну; повторный вызов не создаёт вторую | ✅ |
+| T4.2 | Функция перехода состояния с картой разрешённых переходов (`DRAFT→VIEWING→VOTING→FINISHED`) | T4.1 | переходы `FINISHED→VOTING`, `FINISHED→VIEWING`, повторный запуск/остановка — отклоняются на сервере | ✅ |
+| T4.3 | Команды администратора для запуска/остановки голосования | T4.2, T3.4 | доступно только ADMIN; при запуске пишется `votingStartedAt`, при остановке — `votingFinishedAt` | ✅ |
+
+Реализация: `src/services/voting-state.service.ts` (`getOrCreateVotingState`, `ALLOWED_TRANSITIONS`, `openViewing`/`startVoting`/`stopVoting`, `InvalidVotingTransitionError`), `src/bot/commands/voting-state.commands.ts` (хендлеры), `src/index.ts` (регистрация `/open_viewing`, `/start_voting`, `/stop_voting`, все под `requireRole(UserRole.ADMIN)`). Перед этой фазой роль `MODERATOR` удалена из модели — см. DECISIONS.md D18. `typecheck`/`lint`/`build` проходят чисто.
 
 ## Phase 5 — Voting access (`canVote`) + атомарность ⏳ Todo
 

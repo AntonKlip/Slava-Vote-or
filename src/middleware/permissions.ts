@@ -5,8 +5,7 @@ import { UserRole } from '../generated/prisma/enums.js';
 
 const ROLE_RANK: Record<UserRole, number> = {
   [UserRole.USER]: 0,
-  [UserRole.MODERATOR]: 1,
-  [UserRole.ADMIN]: 2,
+  [UserRole.ADMIN]: 1,
 };
 
 export const attachDbUser: MiddlewareFn<MyContext> = async (ctx, next) => {

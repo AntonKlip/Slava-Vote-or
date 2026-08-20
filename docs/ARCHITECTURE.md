@@ -67,7 +67,7 @@ User ──(0..1)── VotingPermission ──(grantedBy)── User
 VotingState  (одна строка на всё приложение: DRAFT/VIEWING/VOTING/FINISHED)
 ```
 
-- **User** — `telegramId` (`BigInt`, unique) — единственный идентификатор личности, `username` только для отображения. `role` (`USER`/`MODERATOR`/`ADMIN`).
+- **User** — `telegramId` (`BigInt`, unique) — единственный идентификатор личности, `username` только для отображения. `role` (`USER`/`ADMIN`).
 - **Photo** — глобальный пул, ни к чему не привязан напрямую. `telegramFileId`, `telegramFileUniqueId` (индекс, не unique — дедупликация, если понадобится, это политика `photo.service`, а не ограничение схемы), `name` (имя участника), `status` (`ACTIVE`/`DELETED`, soft delete).
 - **Nomination** — глобальный список (без привязки к чему-либо, конкурс один): `name`, `description`, `sortOrder`, `active`.
 - **Vote** — `userId` + `photoId` + `nominationId` + `createdAt`. `UNIQUE(userId, photoId, nominationId)` — единственная зафиксированная гарантия. `@@index([nominationId, photoId])` — под агрегацию результатов.
@@ -89,7 +89,7 @@ VotingState  (одна строка на всё приложение: DRAFT/VIEW
 - секреты — только в env variables, `.env` в `.gitignore`, никогда не коммитятся;
 - username никогда не используется как идентификатор;
 - роль пользователя никогда не берётся из клиентского ввода;
-- USER не может вызвать moderator/admin-действия через прямой callback — проверка на сервере, а не скрытие кнопки.
+- USER не может вызвать admin-действия через прямой callback — проверка на сервере, а не скрытие кнопки.
 
 ## Атомарность голосования и переходов состояния (Phase 5, TBD в реализации)
 
