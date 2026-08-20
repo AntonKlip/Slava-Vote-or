@@ -105,15 +105,18 @@
 
 ## Phase 6 — Управление фото и номинациями ⏳ Todo
 
-Новая фаза — этой возможности не было ни в одной прошлой фазе (обнаружено при подготовке миграции на Mini App, см. DECISIONS.md D19).
+Новая фаза — этой возможности не было ни в одной прошлой фазе (обнаружено при подготовке миграции на Mini App, см. DECISIONS.md D19). Разбивка задач и найденные при планировании отклонения от изначального списка — см. DECISIONS.md D31.
 
-| ID | Задача | Зависит от | Приёмочные критерии |
-| --- | --- | --- | --- |
-| T6.1 | `src/services/photo.service.ts` — `createPhoto`, `listActive` (paginated), `getById`, `softDelete` | T2.4 | `status: DELETED` не попадает в `listActive`; связанные `Vote` не трогаются при удалении (D12) |
-| T6.2 | `src/services/nomination.service.ts` — `createNomination`, `listActive` (sortOrder), `deactivate` | T2.5 | без `contestId`, без `PhotoNomination` |
-| T6.3 | Bot-flow добавления фото (ADMIN): фото + caption = имя участника. Caption обязателен | T6.1, T3.4 | без caption `Photo` не создаётся |
-| T6.4 | Bot-команды номинаций: `/add_nomination`, `/list_nominations`, `/deactivate_nomination` (ADMIN) | T6.2, T3.4 | доступны только ADMIN |
-| T6.5 | Тесты: create/list/soft-delete, пагинация, `nomination.service` | T6.1–T6.4 | `npm test` зелёный |
+| ID | Задача | Зависит от | Приёмочные критерии | Статус |
+| --- | --- | --- | --- | --- |
+| T6.1 | `src/services/photo.service.ts` — `createPhoto`, `listActive` (paginated, `ORDER BY createdAt ASC, id ASC`), `getById`, `softDelete` | T2.4 | `status: DELETED` не попадает в `listActive`; порядок детерминирован; связанные `Vote` не трогаются при удалении (D12); пагинация покрыта тестом | ✅ |
+| T6.2 | `src/services/nomination.service.ts` — `createNomination` (`sortOrder = MAX(sortOrder)+1`, не переиспользуется после деактивации), `listActive` (`ORDER BY sortOrder`), `deactivate(id)` | T2.5 | без `contestId`, без `PhotoNomination`; повторный `deactivate` не падает | 🔜 |
+| T6.3 | Bot-flow добавления фото (ADMIN), строго одним сообщением: фото + caption = имя участника. Caption (`trim()`, непустой) обязателен, без диалога/ожидания следующего апдейта | T6.1, T3.4 | без (пустого) caption `Photo` не создаётся | ⏳ |
+| T6.4 | Bot-команды номинаций: `/add_nomination`, `/list_nominations`, `/deactivate_nomination <id>` (ADMIN) | T6.2, T3.4 | доступны только ADMIN; деактивация по `id`, не по имени (`Nomination.name` не unique) | ⏳ |
+| T6.5 | Bot-команды фото: `/list_photos` (paginated), `/delete_photo <id>` (ADMIN) — новая задача, см. D31 | T6.1, T3.4 | доступны только ADMIN; несуществующий/уже удалённый `id` — понятная ошибка | ⏳ |
+| T6.6 | Опциональный доп. интеграционный/регрессионный прогон после T6.3–T6.5 (не обязателен для приёмки — тесты `photo.service`/`nomination.service` уже входят в T6.1/T6.2, см. D26/D31) | T6.1, T6.2 | выполняется только если ручная проверка вскроет непокрытый кейс | 🧊 |
+
+Реализация T6.1: `src/services/photo.service.ts` (`createPhoto`, `listActive`, `getById`, `softDelete`), `src/services/photo.service.test.ts` (7 тестов, включая проверку сохранности `Vote` после `softDelete`). `typecheck`/`lint`/`build`/`npm test` (36/36) проходят чисто.
 
 ## Phase 7 — Telegram Mini App ⏳ Todo
 
