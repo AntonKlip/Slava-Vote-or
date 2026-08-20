@@ -5,7 +5,7 @@ import { createNomination, deactivate, listActive } from './nomination.service.j
 // Оперирует реальной Neon-БД (нет тестовой БД, см. DECISIONS.md D4/D30) —
 // все созданные номинации отслеживаются и удаляются в afterAll.
 describe('nomination.service (integration)', () => {
-  const createdIds: string[] = [];
+  const createdIds: number[] = [];
 
   afterAll(async () => {
     await prisma.nomination.deleteMany({ where: { id: { in: createdIds } } });

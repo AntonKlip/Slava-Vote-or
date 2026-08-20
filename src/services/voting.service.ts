@@ -60,7 +60,7 @@ export interface CastVoteResult {
  * не может "проскочить" между проверкой canVote и записью голоса — UPDATE из
  * voting-state.service ждёт снятия блокировки той же строки.
  */
-export async function castVote(user: User, photoId: string, nominationId: string): Promise<CastVoteResult> {
+export async function castVote(user: User, photoId: number, nominationId: number): Promise<CastVoteResult> {
   return prisma.$transaction(async (tx) => {
     const rows = await tx.$queryRaw<{ status: VotingStatus }[]>`
       SELECT status FROM "VotingState" WHERE id = ${VOTING_STATE_SINGLETON_ID} FOR UPDATE

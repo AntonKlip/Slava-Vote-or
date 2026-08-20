@@ -43,7 +43,7 @@ model User {
 }
 
 model Photo {
-  id                   String      @id @default(cuid())
+  id                   Int         @id @default(autoincrement())
   telegramFileId       String
   telegramFileUniqueId String
   name                 String
@@ -57,7 +57,7 @@ model Photo {
 }
 
 model Nomination {
-  id          String  @id @default(cuid())
+  id          Int     @id @default(autoincrement())
   name        String
   description String?
   sortOrder   Int     @default(0)
@@ -69,8 +69,8 @@ model Nomination {
 model Vote {
   id           String   @id @default(cuid())
   userId       String
-  photoId      String
-  nominationId String
+  photoId      Int
+  nominationId Int
   createdAt    DateTime @default(now())
 
   user       User       @relation(fields: [userId], references: [id])

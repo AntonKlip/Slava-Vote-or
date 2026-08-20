@@ -70,8 +70,8 @@ VotingState  (одна строка на всё приложение: DRAFT/VIEW
 ```
 
 - **User** — `telegramId` (`BigInt`, unique) — единственный идентификатор личности, `username` только для отображения. `role` (`USER`/`ADMIN`).
-- **Photo** — глобальный пул, ни к чему не привязан напрямую. `telegramFileId`, `telegramFileUniqueId` (индекс, не unique — дедупликация, если понадобится, это политика `photo.service`, а не ограничение схемы), `name` (имя участника), `status` (`ACTIVE`/`DELETED`, soft delete).
-- **Nomination** — глобальный список (без привязки к чему-либо, конкурс один): `name`, `description`, `sortOrder`, `active`.
+- **Photo** — глобальный пул, ни к чему не привязан напрямую. `id` — `Int autoincrement` (не cuid, как у остальных моделей — короткий id нужен админу для ручного ввода в bot-командах, см. DECISIONS.md D32), `telegramFileId`, `telegramFileUniqueId` (индекс, не unique — дедупликация, если понадобится, это политика `photo.service`, а не ограничение схемы), `name` (имя участника), `status` (`ACTIVE`/`DELETED`, soft delete).
+- **Nomination** — глобальный список (без привязки к чему-либо, конкурс один): `id` — `Int autoincrement` (см. D32), `name`, `description`, `sortOrder`, `active`.
 - **Vote** — `userId` + `photoId` + `nominationId` + `createdAt`. `UNIQUE(userId, photoId, nominationId)` — единственная зафиксированная гарантия. `@@index([nominationId, photoId])` — под агрегацию результатов.
 - **VotingPermission** — индивидуальный ранний доступ к голосованию: `userId` (unique — одно разрешение на пользователя), `grantedBy` (FK на User).
 - **VotingState** — `status` (`VotingStatus`: `DRAFT`/`VIEWING`/`VOTING`/`FINISHED`), `votingStartedAt`, `votingFinishedAt`. Одна строка на всё приложение; singleton не закреплён на уровне БД — это ответственность `voting-state.service` (создать при отсутствии, никогда не создавать вторую запись).

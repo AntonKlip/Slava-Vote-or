@@ -7,7 +7,7 @@ import { createPhoto, getById, listActive, softDelete } from './photo.service.js
 // Оперирует реальной Neon-БД (нет тестовой БД, см. DECISIONS.md D4/D30) —
 // все созданные фото отслеживаются и удаляются в afterAll.
 describe('photo.service (integration)', () => {
-  const createdPhotoIds: string[] = [];
+  const createdPhotoIds: number[] = [];
 
   afterAll(async () => {
     await prisma.photo.deleteMany({ where: { id: { in: createdPhotoIds } } });
@@ -71,7 +71,7 @@ describe('photo.service (integration)', () => {
   it('getById возвращает фото по id и null для несуществующего', async () => {
     const photo = await makePhoto('Проверка getById');
     expect((await getById(photo.id))?.id).toBe(photo.id);
-    expect(await getById('does-not-exist')).toBeNull();
+    expect(await getById(-1)).toBeNull();
   });
 
   it('softDelete переводит фото в статус DELETED', async () => {
@@ -84,7 +84,7 @@ describe('photo.service (integration)', () => {
 describe('photo.service — softDelete не трогает связанные Vote', () => {
   let user: User;
   let nomination: Nomination;
-  let photoId: string;
+  let photoId: number;
   let voteId: string;
 
   beforeAll(async () => {

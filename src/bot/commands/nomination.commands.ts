@@ -37,8 +37,9 @@ export async function handleListNominations(ctx: MyContext): Promise<void> {
 }
 
 export async function handleDeactivateNomination(ctx: MyContext): Promise<void> {
-  const id = ctx.match?.toString().trim();
-  if (!id) {
+  const raw = ctx.match?.toString().trim();
+  const id = raw ? Number(raw) : NaN;
+  if (!raw || !Number.isInteger(id)) {
     await ctx.reply('Укажите id номинации: /deactivate_nomination <id> (см. /list_nominations).');
     return;
   }

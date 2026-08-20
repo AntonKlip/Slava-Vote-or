@@ -28,6 +28,6 @@ export async function listActive(): Promise<Nomination[]> {
   });
 }
 
-export async function deactivate(id: string): Promise<Nomination> {
+export async function deactivate(id: number): Promise<Nomination> {
   return prisma.nomination.update({ where: { id }, data: { active: false } });
 }

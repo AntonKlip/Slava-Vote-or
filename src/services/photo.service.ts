@@ -46,10 +46,10 @@ export async function listActive(params: ListActivePhotosParams = {}): Promise<L
   return { items, total };
 }
 
-export async function getById(id: string): Promise<Photo | null> {
+export async function getById(id: number): Promise<Photo | null> {
   return prisma.photo.findUnique({ where: { id } });
 }
 
-export async function softDelete(id: string): Promise<Photo> {
+export async function softDelete(id: number): Promise<Photo> {
   return prisma.photo.update({ where: { id }, data: { status: PhotoStatus.DELETED } });
 }
