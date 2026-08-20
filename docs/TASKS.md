@@ -112,8 +112,8 @@
 | T6.1 | `src/services/photo.service.ts` — `createPhoto`, `listActive` (paginated, `ORDER BY createdAt ASC, id ASC`), `getById`, `softDelete` | T2.4 | `status: DELETED` не попадает в `listActive`; порядок детерминирован; связанные `Vote` не трогаются при удалении (D12); пагинация покрыта тестом | ✅ |
 | T6.2 | `src/services/nomination.service.ts` — `createNomination` (`sortOrder = MAX(sortOrder)+1`, не переиспользуется после деактивации), `listActive` (`ORDER BY sortOrder`), `deactivate(id)` | T2.5 | без `contestId`, без `PhotoNomination`; повторный `deactivate` не падает | ✅ |
 | T6.3 | Bot-flow добавления фото (ADMIN), строго одним сообщением: фото + caption = имя участника. Caption (`trim()`, непустой) обязателен, без диалога/ожидания следующего апдейта | T6.1, T3.4 | без (пустого) caption `Photo` не создаётся | ✅ |
-| T6.4 | Bot-команды номинаций: `/add_nomination`, `/list_nominations`, `/deactivate_nomination <id>` (ADMIN) | T6.2, T3.4 | доступны только ADMIN; деактивация по `id`, не по имени (`Nomination.name` не unique) | ⏳ |
-| T6.5 | Bot-команды фото: `/list_photos` (paginated), `/delete_photo <id>` (ADMIN) — новая задача, см. D31 | T6.1, T3.4 | доступны только ADMIN; несуществующий/уже удалённый `id` — понятная ошибка | ⏳ |
+| T6.4 | Bot-команды номинаций: `/add_nomination`, `/list_nominations`, `/deactivate_nomination <id>` (ADMIN) | T6.2, T3.4 | доступны только ADMIN; деактивация по `id`, не по имени (`Nomination.name` не unique) | ✅ |
+| T6.5 | Bot-команды фото: `/list_photos` (paginated), `/delete_photo <id>` (ADMIN) — новая задача, см. D31 | T6.1, T3.4 | доступны только ADMIN; несуществующий/уже удалённый `id` — понятная ошибка | ✅ |
 | T6.6 | Опциональный доп. интеграционный/регрессионный прогон после T6.3–T6.5 (не обязателен для приёмки — тесты `photo.service`/`nomination.service` уже входят в T6.1/T6.2, см. D26/D31) | T6.1, T6.2 | выполняется только если ручная проверка вскроет непокрытый кейс | 🧊 |
 
 Реализация T6.1: `src/services/photo.service.ts` (`createPhoto`, `listActive`, `getById`, `softDelete`), `src/services/photo.service.test.ts` (7 тестов, включая проверку сохранности `Vote` после `softDelete`). `typecheck`/`lint`/`build`/`npm test` (36/36) проходят чисто.
@@ -121,6 +121,8 @@
 Реализация T6.2: `src/services/nomination.service.ts` (`createNomination`, `listActive`, `deactivate`), `src/services/nomination.service.test.ts` (4 теста, включая проверку что `sortOrder` не переиспользуется после деактивации). `typecheck`/`lint`/`build`/`npm test` (40/40) проходят чисто.
 
 Реализация T6.3: `src/bot/handlers/photo-add.handler.ts` (`handleAddPhoto`), регистрация `bot.on('message:photo', requireRole(ADMIN), handleAddPhoto)` в `src/index.ts`. Без отдельного unit-теста хендлера — как и в Phase 4/5, тестируется только сервисный слой (T6.1); ручная проверка через `npm run dev` — перед финальной приёмкой Phase 6. `typecheck`/`lint`/`build` чисты.
+
+Реализация T6.4/T6.5: `src/bot/commands/nomination.commands.ts` (`handleAddNomination`, `handleListNominations`, `handleDeactivateNomination`), `src/bot/commands/photo.commands.ts` (`handleListPhotos`, `handleDeletePhoto`), регистрация всех пяти команд в `src/index.ts` под `requireRole(ADMIN)`. Несуществующий `id` в `deactivate_nomination`/`delete_photo` отлавливается через `Prisma.PrismaClientKnownRequestError` (код `P2025`) и превращается в понятное сообщение, а не падает исключением. Без отдельных unit-тестов хендлеров (см. T6.3) — сервисный слой уже покрыт (T6.1/T6.2); ручная проверка — перед финальной приёмкой Phase 6. `typecheck`/`lint`/`build`/`npm test` (40/40) чисты.
 
 ## Phase 7 — Telegram Mini App ⏳ Todo
 
