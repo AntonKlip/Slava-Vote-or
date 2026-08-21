@@ -6,6 +6,8 @@ import {
   openViewing,
   startVoting,
   stopVoting,
+  nextPhase,
+  previousPhase,
   InvalidVotingTransitionError,
 } from './voting-state.service.js';
 
@@ -63,5 +65,48 @@ describe('voting-state.service — переходы состояний', () => {
   it('пропуск состояния DRAFT -> VOTING отклоняется', async () => {
     await setStatus(VotingStatus.DRAFT);
     await expect(startVoting()).rejects.toThrow(InvalidVotingTransitionError);
+  });
+
+  it('previousPhase: FINISHED -> VOTING обнуляет votingFinishedAt, сохраняет votingStartedAt', async () => {
+    await setStatus(VotingStatus.VIEWING);
+    await startVoting();
+    const finished = await stopVoting();
+    expect(finished.votingStartedAt).not.toBeNull();
+
+    const result = await previousPhase();
+    expect(result.status).toBe(VotingStatus.VOTING);
+    expect(result.votingFinishedAt).toBeNull();
+    expect(result.votingStartedAt).not.toBeNull();
+  });
+
+  it('previousPhase: VOTING -> VIEWING обнуляет votingStartedAt', async () => {
+    await setStatus(VotingStatus.VIEWING);
+    await startVoting();
+    const result = await previousPhase();
+    expect(result.status).toBe(VotingStatus.VIEWING);
+    expect(result.votingStartedAt).toBeNull();
+  });
+
+  it('previousPhase: VIEWING -> DRAFT разрешён', async () => {
+    await setStatus(VotingStatus.VIEWING);
+    const result = await previousPhase();
+    expect(result.status).toBe(VotingStatus.DRAFT);
+  });
+
+  it('previousPhase: DRAFT — раньше некуда, отклоняется с from === to', async () => {
+    await setStatus(VotingStatus.DRAFT);
+    await expect(previousPhase()).rejects.toMatchObject({ from: VotingStatus.DRAFT, to: VotingStatus.DRAFT });
+  });
+
+  it('nextPhase: DRAFT -> VIEWING -> VOTING -> FINISHED последовательно', async () => {
+    await setStatus(VotingStatus.DRAFT);
+    expect((await nextPhase()).status).toBe(VotingStatus.VIEWING);
+    expect((await nextPhase()).status).toBe(VotingStatus.VOTING);
+    expect((await nextPhase()).status).toBe(VotingStatus.FINISHED);
+  });
+
+  it('nextPhase: FINISHED — дальше некуда, отклоняется с from === to', async () => {
+    await setStatus(VotingStatus.FINISHED);
+    await expect(nextPhase()).rejects.toMatchObject({ from: VotingStatus.FINISHED, to: VotingStatus.FINISHED });
   });
 });

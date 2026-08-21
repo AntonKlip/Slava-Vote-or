@@ -22,6 +22,17 @@ export const ALLOWED_TRANSITIONS: Record<VotingStatus, VotingStatus | null> = {
   [VotingStatus.FINISHED]: null,
 };
 
+/**
+ * Зеркало ALLOWED_TRANSITIONS для отката на шаг назад (D38) — возможность вернуть
+ * ошибочно продвинутую фазу без ручного вмешательства в БД.
+ */
+export const PREVIOUS_TRANSITIONS: Record<VotingStatus, VotingStatus | null> = {
+  [VotingStatus.DRAFT]: null,
+  [VotingStatus.VIEWING]: VotingStatus.DRAFT,
+  [VotingStatus.VOTING]: VotingStatus.VIEWING,
+  [VotingStatus.FINISHED]: VotingStatus.VOTING,
+};
+
 export async function getOrCreateVotingState(): Promise<VotingState> {
   return prisma.votingState.upsert({
     where: { id: SINGLETON_ID },
@@ -30,20 +41,31 @@ export async function getOrCreateVotingState(): Promise<VotingState> {
   });
 }
 
-async function transitionTo(target: VotingStatus): Promise<VotingState> {
+/**
+ * votingStartedAt/votingFinishedAt держат инвариант "непусто ⇔ фаза дошла до VOTING/FINISHED
+ * хотя бы раз за текущий проход". Идя вперёд, штамп проставляется при входе в фазу; идя
+ * назад (D38), штамп фазы, которую только что покинули, обнуляется — иначе после отката
+ * FINISHED -> VOTING висел бы votingFinishedAt как будто голосование всё ещё завершено.
+ * NOW()/NULL пишутся внутри того же UPDATE, а не в JS до вызова: при конкурентной блокировке
+ * строки (см. castVote в voting.service.ts, "FOR UPDATE") запрос может ждать снятия лока,
+ * и JS-таймстемп, вычисленный заранее, оказался бы менее точным, чем момент UPDATE в Postgres.
+ */
+function timestampSql(from: VotingStatus, to: VotingStatus): Prisma.Sql {
+  if (to === VotingStatus.VOTING && from === VotingStatus.VIEWING) return Prisma.sql`, "votingStartedAt" = NOW()`;
+  if (to === VotingStatus.FINISHED) return Prisma.sql`, "votingFinishedAt" = NOW()`;
+  if (from === VotingStatus.FINISHED) return Prisma.sql`, "votingFinishedAt" = NULL`;
+  if (from === VotingStatus.VOTING) return Prisma.sql`, "votingStartedAt" = NULL`;
+  return Prisma.empty;
+}
+
+async function transitionTo(target: VotingStatus, allowed: Record<VotingStatus, VotingStatus | null>): Promise<VotingState> {
   const current = await getOrCreateVotingState();
 
-  if (ALLOWED_TRANSITIONS[current.status] !== target) {
+  if (allowed[current.status] !== target) {
     throw new InvalidVotingTransitionError(current.status, target);
   }
 
-  // Таймстемп пишется через NOW() внутри того же UPDATE, а не new Date() в JS до вызова:
-  // при конкурентной блокировке строки (см. castVote в voting.service.ts, "FOR UPDATE")
-  // этот запрос может провести время в очереди на лок — JS-таймстемп, вычисленный заранее,
-  // оказался бы менее точным, чем момент фактического выполнения UPDATE в Postgres.
-  const timestampColumn =
-    target === VotingStatus.VOTING ? 'votingStartedAt' : target === VotingStatus.FINISHED ? 'votingFinishedAt' : null;
-  const timestampSet = timestampColumn ? Prisma.sql`, "${Prisma.raw(timestampColumn)}" = NOW()` : Prisma.empty;
+  const timestampSet = timestampSql(current.status, target);
 
   const count = await prisma.$executeRaw`
     UPDATE "VotingState"
@@ -59,6 +81,30 @@ async function transitionTo(target: VotingStatus): Promise<VotingState> {
   return getOrCreateVotingState();
 }
 
-export const openViewing = (): Promise<VotingState> => transitionTo(VotingStatus.VIEWING);
-export const startVoting = (): Promise<VotingState> => transitionTo(VotingStatus.VOTING);
-export const stopVoting = (): Promise<VotingState> => transitionTo(VotingStatus.FINISHED);
+export const openViewing = (): Promise<VotingState> => transitionTo(VotingStatus.VIEWING, ALLOWED_TRANSITIONS);
+export const startVoting = (): Promise<VotingState> => transitionTo(VotingStatus.VOTING, ALLOWED_TRANSITIONS);
+export const stopVoting = (): Promise<VotingState> => transitionTo(VotingStatus.FINISHED, ALLOWED_TRANSITIONS);
+
+/**
+ * Шаг вперёд/назад по цепочке DRAFT -> VIEWING -> VOTING -> FINISHED без явной целевой
+ * фазы — для команд /next_phase и /prev_phase (D38). Бросает
+ * InvalidVotingTransitionError(from, from) (одинаковые from/to — сигнал "шага в этом
+ * направлении не существует"), если уже в крайней фазе цепочки в эту сторону.
+ */
+export async function nextPhase(): Promise<VotingState> {
+  const current = await getOrCreateVotingState();
+  const target = ALLOWED_TRANSITIONS[current.status];
+  if (!target) {
+    throw new InvalidVotingTransitionError(current.status, current.status);
+  }
+  return transitionTo(target, ALLOWED_TRANSITIONS);
+}
+
+export async function previousPhase(): Promise<VotingState> {
+  const current = await getOrCreateVotingState();
+  const target = PREVIOUS_TRANSITIONS[current.status];
+  if (!target) {
+    throw new InvalidVotingTransitionError(current.status, current.status);
+  }
+  return transitionTo(target, PREVIOUS_TRANSITIONS);
+}
