@@ -17,20 +17,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // getToken вызывается только внутри fetch (client.ts), не во время рендера.
   const tokenRef = useRef<string | null>(null);
 
-  const handleUnauthorized = useCallback(() => {
-    tokenRef.current = null;
-    setUser(null);
-    setStatus('error');
-    setError('Сессия истекла или недействительна. Попробуйте войти снова.');
-  }, []);
-
-  const api = useMemo(
-    // oxlint-disable-next-line react/refs -- getToken вызывается при запросе (в client.ts), не при рендере
-    () => createApiClient({ getToken: () => tokenRef.current, onUnauthorized: handleUnauthorized }),
-    [handleUnauthorized],
-  );
-
-  const login = useCallback(async () => {
+  // Возвращает новый токен при успехе или null при неудаче — так api-клиент (client.ts)
+  // может молча переавторизоваться на 401 и повторить запрос, вместо разрыва сессии
+  // (актуально для долгоживущего WebView за постоянной menu-button Telegram, где токен
+  // может протухнуть в фоне без переоткрытия Mini App).
+  const login = useCallback(async (): Promise<string | null> => {
     setStatus('loading');
     setError(null);
 
@@ -45,7 +36,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!initData) {
       setStatus('error');
       setError('initData не найден — приложение должно быть открыто через Telegram WebApp API.');
-      return;
+      return null;
     }
 
     try {
@@ -65,13 +56,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       tokenRef.current = data.token;
       setUser(data.user);
       setStatus('ready');
+      return data.token;
     } catch (err) {
       tokenRef.current = null;
       setUser(null);
       setStatus('error');
       setError(err instanceof Error ? err.message : 'Не удалось авторизоваться.');
+      return null;
     }
   }, []);
+
+  const api = useMemo(
+    // oxlint-disable-next-line react/refs -- getToken вызывается при запросе (в client.ts), не при рендере
+    () => createApiClient({ getToken: () => tokenRef.current, reauthenticate: login }),
+    [login],
+  );
 
   useEffect(() => {
     // Fetch-on-mount: единственный способ получить сессию — initData доступен

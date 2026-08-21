@@ -16,25 +16,33 @@ function makeApiError(status: number, body: unknown, fallbackMessage: string): A
 
 export interface ApiClientOptions {
   getToken: () => string | null;
-  onUnauthorized: () => void;
+  reauthenticate: () => Promise<string | null>;
 }
 
 /**
  * Единственная точка, через которую фронтенд ходит в защищённые /api/* маршруты:
- * автоматически проставляет Authorization и централизованно реагирует на 401
- * (сброс сессии), вместо того чтобы каждый компонент проверял статус сам.
+ * автоматически проставляет Authorization и централизованно реагирует на 401.
+ * Токен может протухнуть под пользователем без видимого разрыва сессии (например,
+ * постоянная menu-button Telegram Desktop держит один и тот же WebView открытым
+ * часами) — при 401 делаем одну попытку re-auth и повторяем запрос, вместо того
+ * чтобы сразу сбрасывать сессию в ошибку.
  */
-export function createApiClient({ getToken, onUnauthorized }: ApiClientOptions) {
+export function createApiClient({ getToken, reauthenticate }: ApiClientOptions) {
   async function rawRequest(path: string, init: RequestInit = {}): Promise<Response> {
-    const token = getToken();
-    const headers = new Headers(init.headers);
-    if (token) {
-      headers.set('Authorization', `Bearer ${token}`);
-    }
+    const doFetch = (token: string | null) => {
+      const headers = new Headers(init.headers);
+      if (token) {
+        headers.set('Authorization', `Bearer ${token}`);
+      }
+      return fetch(path, { ...init, headers });
+    };
 
-    const res = await fetch(path, { ...init, headers });
+    let res = await doFetch(getToken());
     if (res.status === 401) {
-      onUnauthorized();
+      const freshToken = await reauthenticate();
+      if (freshToken) {
+        res = await doFetch(freshToken);
+      }
     }
     return res;
   }

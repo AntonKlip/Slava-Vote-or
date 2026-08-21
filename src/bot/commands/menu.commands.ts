@@ -2,7 +2,6 @@ import type { BotCommand } from 'grammy/types';
 import { Keyboard } from 'grammy';
 import type { MyContext } from '../context.js';
 import { UserRole } from '../../generated/prisma/enums.js';
-import { config } from '../../config/config.js';
 
 export const USER_COMMANDS: BotCommand[] = [
   { command: 'start', description: 'Начать работу с ботом' },
@@ -35,11 +34,11 @@ export async function syncCommandsForChat(ctx: MyContext): Promise<void> {
   });
 }
 
+// Единственный вход в Mini App — персистентная menu-button (D37, D40): в отличие от неё,
+// эта кнопка встроена в уже отправленное сообщение и застывает со старым MINI_APP_URL
+// после следующего перезапуска супервизора (D39), поэтому web_app-кнопку здесь не даём.
 export function buildAdminKeyboard(): Keyboard {
-  return new Keyboard()
-    .webApp('Открыть', config.miniAppUrl)
-    .text(ALL_COMMANDS_BUTTON_TEXT)
-    .resized();
+  return new Keyboard().text(ALL_COMMANDS_BUTTON_TEXT).resized();
 }
 
 export function formatAllCommandsText(): string {
