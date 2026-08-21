@@ -69,13 +69,13 @@ frontend/                            (npm workspace, Phase 8, см. раздел
 
 Реализовано на данный момент (после Phase 7, T7.1–T7.10, и Phase 8, T8.1–T8.6): всё из Phase 6 (`config/`, `database/prisma.ts`, `bot/context.ts`, `middleware/permissions.ts`, `bot/handlers/*`, `bot/commands/*`, `services/{user,voting-state,voting-permission,voting,photo,nomination}.service.ts`) плюс `bot/bot.ts`, `services/results.service.ts`, `api/` (Express HTTP API поверх тех же `services/`, см. ниже) и полностью рабочий `frontend/` (React+TS+Vite): авторизация через Telegram `initData`, просмотр фото по фазам, голосование, результаты — все экраны проверены вручную в браузере (Phase 8, T8.1–T8.6, DevTools Local Overrides вместо реального Telegram, см. ниже).
 
-Запуск внутри реального Telegram (Phase 9) — следующая фаза (см. DECISIONS.md D33). Express (`src/api/app.ts`) работает в том же Node-процессе, что и бот (`bot.start()` и `app.listen()` — оба в `src/index.ts`). Бот остаётся точкой входа и интерфейсом администратора.
+Express (`src/api/app.ts`) работает в том же Node-процессе, что и бот (`bot.start()` и `app.listen()` — оба в `src/index.ts`). Бот остаётся точкой входа и интерфейсом администратора. Запуск внутри реального Telegram (Phase 9, T9.1–T9.2) реализован: `express.static` отдаёт продакшен-сборку `frontend/dist` из того же процесса, кнопка запуска — персистентная menu-button бота (`type: web_app`). Финальная ручная E2E-проверка в реальном Telegram (T9.3) — см. DECISIONS.md D33/D37.
 
 ## Frontend (Phase 8)
 
 `frontend/` — отдельный npm workspace (корневой `package.json` → `"workspaces": ["frontend"]`, см. DECISIONS.md D22), React + TypeScript + Vite, обычный CSS без UI-кита (финальный визуал не определён, см. PRODUCT_SPEC.md TBD). Инструментарий фронтенда (сборка, typecheck, lint через `oxlint`) полностью независим от корневого `tsconfig.json`/`eslint.config.js` — backend-скрипты (`dev`, `build`, `typecheck`, `lint`, `test`) не задевают `frontend/` и наоборот; корневые прокси-скрипты `dev:frontend`/`build:frontend`/`typecheck:frontend`/`lint:frontend` явно вызывают воркспейс (`npm run <script> -w frontend`).
 
-В dev-режиме `frontend/vite.config.ts` проксирует `/api/*` на `http://localhost:<API_PORT>` (та же переменная, что читает backend, значение подтягивается из корневого `.env` через `loadEnv`) — CORS не нужен уже на этапе разработки. В проде (Phase 9) `frontend/dist` будет отдаваться тем же Express-процессом с того же origin, что и API.
+В dev-режиме `frontend/vite.config.ts` проксирует `/api/*` на `http://localhost:<API_PORT>` (та же переменная, что читает backend, значение подтягивается из корневого `.env` через `loadEnv`) — CORS не нужен уже на этапе разработки. В проде `frontend/dist` отдаётся тем же Express-процессом с того же origin, что и API (`express.static` в `src/api/app.ts`, Phase 9 T9.1) — без SPA-fallback роута, фронтенд не использует клиентский роутер (единственная точка входа `/`). Корневой `npm run build` собирает и фронтенд (`vite build`), и backend одной командой.
 
 Локальная разработка запускается двумя параллельными процессами: `npm run dev` (бот + Express, backend) и `npm run dev:frontend` (Vite).
 
@@ -170,10 +170,25 @@ Mini App получает изображения через серверный �
 | `ADMIN_TELEGRAM_IDS` | telegram_id первых администраторов, через запятую |
 | `API_PORT` | порт Express HTTP API (Phase 7); необязательна, по умолчанию `3000` |
 | `APP_JWT_SECRET` | секрет для подписи session-JWT Mini App (Phase 7, D21/D34) |
+| `MINI_APP_URL` | публичный HTTPS-адрес Mini App (Phase 9), используется для menu-button бота |
 
 - БД — Neon (бесплатный тариф), используется и для разработки, и в будущем для продакшена — без Docker/локального Postgres (см. DECISIONS.md D4). `DATABASE_URL` хранится только у пользователя, никогда не передаётся в чат.
-- Бот — long polling (не нужен публичный HTTPS endpoint). Конкретный хостинг для постоянно работающего Node.js-процесса — TBD (VPS/Railway/Render — не выбрано).
+- Бот — long polling (не нужен публичный HTTPS endpoint для самого Telegram API).
 - Возможен cold start Neon после простоя — специальный keep-alive/ping не добавляется без необходимости, сначала реализуется корректная обработка задержки первого запроса.
+
+### Хостинг — локальный self-hosting с автоматическим восстановлением процессов (DECISIONS.md D39)
+
+Процесс (`node dist/index.js` — Express API + статика фронтенда + бот, всё в одном процессе, см. выше) работает **локально на ПК пользователя**, не в облаке — осознанный выбор в пользу $0 вместо платного always-on хостинга. Это **не гарантия доступности** — домашний ПК, интернет-соединение и Windows остаются единой точкой отказа, никакой скрипт от этого не защищает. Цель — убрать необходимость ручного вмешательства при обычных сбоях (упал процесс, перезагрузился ПК), не более.
+
+`scripts/run-with-tunnel.ps1` — PowerShell-супервизор в бесконечном цикле:
+- поднимает `cloudflared tunnel --url http://localhost:<API_PORT>` (бесплатный `trycloudflare.com` quick tunnel — тот же инструмент, что в Phase 9 T9.3, no uptime guarantee по природе самого сервиса) и ждёт до 30 сек появления URL в его выводе (перенаправлен в файл, не читается "на лету");
+- атомарно (временный файл + `Move-Item`) прописывает полученный URL в `MINI_APP_URL` в `.env` — падение скрипта посередине записи не может оставить `.env` без обязательной переменной;
+- запускает `node dist/index.js` напрямую (не через `npm start`) — отслеживаемый PID гарантированно совпадает с реальным процессом, а не с промежуточной npm-обёрткой;
+- каждые 10 сек проверяет, живы ли оба процесса; при падении любого — гарантированно останавливает второй (ждёт фактического исчезновения PID, не только вызова `Stop-Process`) и запускает всю пару заново с чистого листа (новый туннель → новый URL).
+
+Автозапуск — задача Task Scheduler `SlavaVoteBot` (триггер "At log on", `MultipleInstances=IgnoreNew`, обычные права пользователя). Если ПК перезагрузится, а пользователь не войдёт в систему — бот не поднимется, пока не залогинится; для домашнего ПК это осознанно приемлемо. Двойной запуск исключён на двух уровнях: настройка задачи + файл-лок (`run/supervisor.lock`) внутри самого скрипта. Простой append-лог `logs/supervisor.log` (без ротации — конкурс однодневный) фиксирует каждый цикл.
+
+**Эксплуатационное ограничение quick tunnel:** при каждом полном перезапуске URL туннеля меняется случайно. `setChatMenuButton` переустанавливается при каждом старте `node dist/index.js` и получает актуальный `MINI_APP_URL` — новые открытия Mini App через menu-button получают правильный адрес. Но уже открытая у кого-то сессия Mini App со старым URL не переключается сама — соединение с сервером просто обрывается, нужно заново открыть Mini App через menu-button. Цена бесплатного варианта, приемлемая для однодневного конкурса.
 
 ## Тестирование
 
