@@ -1,3 +1,5 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import express, { type Express, type NextFunction, type Request, type Response } from 'express';
 import type { Bot } from 'grammy';
 import type { MyContext } from '../bot/context.js';
@@ -9,6 +11,8 @@ import { votesRouter } from './routes/votes.routes.js';
 import { resultsRouter } from './routes/results.routes.js';
 import { requireAuth } from './middleware/require-auth.js';
 
+const frontendDistDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../frontend/dist');
+
 export interface CreateAppDeps {
   bot: Bot<MyContext>;
 }
@@ -16,6 +20,7 @@ export interface CreateAppDeps {
 export function createApp({ bot }: CreateAppDeps): Express {
   const app = express();
   app.use(express.json());
+  app.use(express.static(frontendDistDir));
 
   app.get('/api/health', (_req, res) => {
     res.json({ status: 'ok' });
