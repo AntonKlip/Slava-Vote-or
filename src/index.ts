@@ -8,6 +8,8 @@ import {
   handleOpenViewing,
   handleStartVoting,
   handleStopVoting,
+  handleNextPhase,
+  handlePreviousPhase,
 } from './bot/commands/voting-state.commands.js';
 import { handleGrantAccess, handleRevokeAccess } from './bot/commands/voting-permission.commands.js';
 import { handleAddPhoto } from './bot/handlers/photo-add.handler.js';
@@ -17,7 +19,11 @@ import {
   handleDeactivateNomination,
 } from './bot/commands/nomination.commands.js';
 import { handleListPhotos, handleDeletePhoto } from './bot/commands/photo.commands.js';
-import { USER_COMMANDS } from './bot/commands/menu.commands.js';
+import {
+  USER_COMMANDS,
+  ALL_COMMANDS_BUTTON_TEXT,
+  formatAllCommandsText,
+} from './bot/commands/menu.commands.js';
 
 bot.use(attachDbUser);
 
@@ -25,6 +31,8 @@ bot.command('start', handleStart);
 bot.command('open_viewing', requireRole(UserRole.ADMIN), handleOpenViewing);
 bot.command('start_voting', requireRole(UserRole.ADMIN), handleStartVoting);
 bot.command('stop_voting', requireRole(UserRole.ADMIN), handleStopVoting);
+bot.command('next_phase', requireRole(UserRole.ADMIN), handleNextPhase);
+bot.command('prev_phase', requireRole(UserRole.ADMIN), handlePreviousPhase);
 bot.command('grant_access', requireRole(UserRole.ADMIN), handleGrantAccess);
 bot.command('revoke_access', requireRole(UserRole.ADMIN), handleRevokeAccess);
 bot.on('message:photo', requireRole(UserRole.ADMIN), handleAddPhoto);
@@ -33,6 +41,11 @@ bot.command('list_nominations', requireRole(UserRole.ADMIN), handleListNominatio
 bot.command('deactivate_nomination', requireRole(UserRole.ADMIN), handleDeactivateNomination);
 bot.command('list_photos', requireRole(UserRole.ADMIN), handleListPhotos);
 bot.command('delete_photo', requireRole(UserRole.ADMIN), handleDeletePhoto);
+bot.hears(
+  ALL_COMMANDS_BUTTON_TEXT,
+  requireRole(UserRole.ADMIN),
+  async (ctx) => ctx.reply(formatAllCommandsText()),
+);
 
 bot.catch((err) => {
   console.error('Bot error:', err);
@@ -44,4 +57,13 @@ app.listen(config.apiPort, () => {
 });
 
 await bot.api.setMyCommands(USER_COMMANDS);
+
+try {
+  await bot.api.setChatMenuButton({
+    menu_button: { type: 'web_app', text: 'Открыть', web_app: { url: config.miniAppUrl } },
+  });
+} catch (err) {
+  console.error('Failed to set chat menu button:', err);
+}
+
 bot.start();
