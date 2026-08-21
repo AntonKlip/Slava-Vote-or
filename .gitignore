@@ -4,6 +4,10 @@ dist/
 *.log
 .DS_Store
 
+# Local supervisor runtime artifacts (scripts/run-with-tunnel.ps1) — not part of the code
+/logs/
+/run/
+
 # DevTools Local Overrides (T8.2, ручная проверка Mini App без Telegram) —
 # личный dev-артефакт браузера, не часть проекта
 /FolderForOverrides/
