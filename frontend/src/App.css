@@ -95,3 +95,25 @@
   grid-template-columns: repeat(2, 1fr);
   gap: 0.75rem;
 }
+
+.refresh-button {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid #ddd;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.refresh-button svg {
+  width: 20px;
+  height: 20px;
+}
