@@ -1,5 +1,12 @@
 export type VotingStatus = 'DRAFT' | 'VIEWING' | 'VOTING' | 'FINISHED';
 
+export const VOTING_STATUS_LABELS: Record<VotingStatus, string> = {
+  DRAFT: 'Черновик',
+  VIEWING: 'Просмотр',
+  VOTING: 'Голосование',
+  FINISHED: 'Завершено',
+};
+
 export interface VotingStateResponse {
   status: VotingStatus;
 }
@@ -45,4 +52,13 @@ export interface ResultItem {
 
 export interface ResultsResponse {
   items: ResultItem[];
+}
+
+export interface MyVote {
+  photoId: number;
+  nominationId: number;
+}
+
+export interface MyVotesResponse {
+  items: MyVote[];
 }

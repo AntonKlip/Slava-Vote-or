@@ -20,10 +20,24 @@ const VOTE_LABEL: Record<VoteState, string> = {
   error: ' — ошибка, попробуйте ещё раз',
 };
 
-export function PhotoCard({ photo, nominations }: { photo: PhotoListItem; nominations: Nomination[] }) {
+export function PhotoCard({
+  photo,
+  nominations,
+  votedNominationIds,
+}: {
+  photo: PhotoListItem;
+  nominations: Nomination[];
+  votedNominationIds?: Set<number>;
+}) {
   const { api } = useAuth();
   const imageUrl = useAuthorizedImage(photo.imageUrl);
-  const [voteState, setVoteState] = useState<Record<number, VoteState>>({});
+  const [voteState, setVoteState] = useState<Record<number, VoteState>>(() => {
+    const initial: Record<number, VoteState> = {};
+    for (const nominationId of votedNominationIds ?? []) {
+      initial[nominationId] = 'alreadyVoted';
+    }
+    return initial;
+  });
 
   function vote(nominationId: number) {
     setVoteState((s) => ({ ...s, [nominationId]: 'loading' }));

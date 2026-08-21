@@ -70,6 +70,18 @@ export interface CastVoteResult {
   alreadyVoted: boolean;
 }
 
+export interface UserVote {
+  photoId: number;
+  nominationId: number;
+}
+
+export async function listUserVotes(userId: string): Promise<UserVote[]> {
+  return prisma.vote.findMany({
+    where: { userId },
+    select: { photoId: true, nominationId: true },
+  });
+}
+
 /**
  * Атомарная запись голоса. Строка VotingState блокируется (`SELECT ... FOR UPDATE`)
  * на время транзакции, поэтому конкурентный переход состояния (например stopVoting)

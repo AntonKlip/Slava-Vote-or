@@ -1,7 +1,17 @@
 import { Router } from 'express';
-import { castVote, InvalidVoteTargetError, VotingNotAllowedError } from '../../services/voting.service.js';
+import { castVote, InvalidVoteTargetError, listUserVotes, VotingNotAllowedError } from '../../services/voting.service.js';
 
 export const votesRouter = Router();
+
+/**
+ * Собственные голоса пользователя — фронтенду нужно знать, за что он уже голосовал,
+ * чтобы блокировать кнопки повторно при возврате/перезагрузке страницы (не полагаться
+ * только на эфемерное состояние React, которое сбрасывается при ремонте компонента).
+ */
+votesRouter.get('/mine', async (req, res) => {
+  const items = await listUserVotes(req.dbUser!.id);
+  res.json({ items });
+});
 
 /**
  * Тонкий роут поверх castVote() — вся бизнес-логика (canVote, атомарность, идемпотентность)

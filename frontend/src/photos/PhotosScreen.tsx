@@ -1,9 +1,16 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../auth/useAuth';
-import { useVotingState } from '../api/useVotingState';
 import { PhotoCard } from './PhotoCard';
 import type { ApiError } from '../api/client';
-import type { ForbiddenBody, Nomination, NominationsResponse, PhotosResponse, VotingStatus } from '../api/types';
+import type {
+  ForbiddenBody,
+  MyVotesResponse,
+  Nomination,
+  NominationsResponse,
+  PhotosResponse,
+  VotingStatus,
+} from '../api/types';
+import { VOTING_STATUS_LABELS } from '../api/types';
 
 const PAGE_SIZE = 12;
 
@@ -13,13 +20,13 @@ function forbiddenMessage(votingStatus: VotingStatus | undefined): string {
   return 'Просмотр фото сейчас недоступен.';
 }
 
-export function PhotosScreen() {
+export function PhotosScreen({ votingStatus }: { votingStatus: VotingStatus | null }) {
   const { api } = useAuth();
-  const { status: votingStatus } = useVotingState();
 
   const [skip, setSkip] = useState(0);
   const [photos, setPhotos] = useState<PhotosResponse | null>(null);
   const [nominations, setNominations] = useState<Nomination[]>([]);
+  const [votesByPhoto, setVotesByPhoto] = useState<Map<number, Set<number>>>(new Map());
   const [forbidden, setForbidden] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -33,10 +40,18 @@ export function PhotosScreen() {
     Promise.all([
       api.requestJson<PhotosResponse>(`/api/photos?skip=${skip}&take=${PAGE_SIZE}`),
       api.requestJson<NominationsResponse>('/api/nominations'),
+      api.requestJson<MyVotesResponse>('/api/votes/mine'),
     ])
-      .then(([photosRes, nominationsRes]) => {
+      .then(([photosRes, nominationsRes, myVotesRes]) => {
         setPhotos(photosRes);
         setNominations(nominationsRes.items);
+        const byPhoto = new Map<number, Set<number>>();
+        for (const v of myVotesRes.items) {
+          const set = byPhoto.get(v.photoId) ?? new Set<number>();
+          set.add(v.nominationId);
+          byPhoto.set(v.photoId, set);
+        }
+        setVotesByPhoto(byPhoto);
       })
       .catch((err: unknown) => {
         const apiErr = err as ApiError;
@@ -71,7 +86,7 @@ export function PhotosScreen() {
 
   return (
     <div>
-      {votingStatus && <p className="phase-hint">Фаза голосования: {votingStatus}</p>}
+      {votingStatus && <p className="phase-hint">Фаза голосования: {VOTING_STATUS_LABELS[votingStatus]}</p>}
 
       {nominations.length > 0 && (
         <p className="nominations-hint">Номинации: {nominations.map((n) => n.name).join(', ')}</p>
@@ -79,7 +94,12 @@ export function PhotosScreen() {
 
       <div className="photo-grid">
         {photos.items.map((photo) => (
-          <PhotoCard key={photo.id} photo={photo} nominations={nominations} />
+          <PhotoCard
+            key={photo.id}
+            photo={photo}
+            nominations={nominations}
+            votedNominationIds={votesByPhoto.get(photo.id)}
+          />
         ))}
       </div>
 
