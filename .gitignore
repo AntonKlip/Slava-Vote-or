@@ -4,6 +4,10 @@ dist/
 *.log
 .DS_Store
 
+# DevTools Local Overrides (T8.2, ручная проверка Mini App без Telegram) —
+# личный dev-артефакт браузера, не часть проекта
+/FolderForOverrides/
+
 /src/generated/prisma
 
 # AI-agent reference docs auto-installed by `prisma init` (Prisma 7) —

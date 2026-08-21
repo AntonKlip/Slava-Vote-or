@@ -8,6 +8,6 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   prettier,
   {
-    ignores: ['dist/', 'node_modules/', 'src/generated/'],
+    ignores: ['dist/', 'node_modules/', 'src/generated/', 'frontend/'],
   },
 );

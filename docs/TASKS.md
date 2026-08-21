@@ -1,11 +1,12 @@
 # План задач — Slava Vote
 
-Статус: живой документ, обновляется по мере выполнения. Последнее обновление: 2026-08-20.
+Статус: живой документ, обновляется по мере выполнения. Последнее обновление: 2026-08-21.
 
 Продуктовое решение (2026-08-20): основным интерфейсом голосования становится Telegram Mini App
-вместо чат-команд бота. План разработки продолжается тремя фазами: Phase 5 (`canVote` + атомарность —
-без изменений), новая Phase 6 (управление фото/номинациями — этой возможности не было ни в одной
-прошлой фазе), новая Phase 7 (Telegram Mini App). Подробности и обоснование — см. DECISIONS.md D19–D26.
+вместо чат-команд бота. План разработки продолжается: Phase 5 (`canVote` + атомарность — без
+изменений), Phase 6 (управление фото/номинациями), затем сам переход на Mini App — разбитый на
+три фазы по границам ответственности (Phase 7 — HTTP API, Phase 8 — frontend, Phase 9 — запуск
+внутри реального Telegram) вместо одной большой фазы, см. DECISIONS.md D19–D26, D33–D35.
 
 Легенда статусов: ✅ Done · 🔜 Ready (согласовано, можно начинать) · ⏳ Todo (не начато, ждёт предыдущих фаз) · 🧊 Backlog (сознательно отложено / TBD).
 
@@ -19,7 +20,9 @@
 | 4 | Voting state machine | ✅ Done |
 | 5 | Voting access (`canVote`) + атомарность | ✅ Done |
 | 6 | Управление фото и номинациями | ✅ Done |
-| 7 | Telegram Mini App | ⏳ Todo |
+| 7 | Mini App — HTTP API | ✅ Done |
+| 8 | Mini App — Frontend | ✅ Done |
+| 9 | Mini App — Запуск внутри реального Telegram | ⏳ Todo |
 | — | Backlog / TBD | 🧊 |
 
 (Нумерация фаз сохранена от исходного плана; отдельной "Phase 1" как самостоятельной задачи нет — это был чекпоинт внутри Phase 0. Начиная с Phase 5 отдельной фазы "Tests" больше нет — каждая фаза включает тесты в свои приёмочные критерии, см. DECISIONS.md D26.)
@@ -132,11 +135,93 @@
 
 Код T6.1–T6.5 закоммичен в `main` (6+ локальных коммитов) — **push в `origin/main` пока не выполнялся**, решение за пользователем.
 
-Phase 6 закрыта. Следующий шаг — Phase 7 (Telegram Mini App, см. DECISIONS.md D19–D25), по одной фазе за раз.
+Phase 6 закрыта.
 
-## Phase 7 — Telegram Mini App ⏳ Todo
+## Phase 7 — Mini App: HTTP API ✅ Done
 
-См. полную разбивку T7.1–T7.14 и архитектурные решения D20–D25 в DECISIONS.md; задачи не переносятся сюда до начала фазы (по одной фазе за раз).
+Первая из трёх фаз перехода на Telegram Mini App (D19), разделённых по границам ответственности вместо одной большой Phase 7 (обоснование — DECISIONS.md D33): **Phase 7** — HTTP API, **Phase 8** — Mini App frontend, **Phase 9** — запуск внутри реального Telegram. Каждая фаза полностью реализуется и проверяется до начала следующей.
+
+Phase 7 — backend-слой поверх существующих `services/`, без фронтенда и без Telegram; проверяется curl/supertest. Архитектурные решения — DECISIONS.md D19–D25 (общая архитектура Mini App), D33–D35 (уточнения по auth/результатам/разбивке на фазы).
+
+| ID | Задача | Зависит от | Приёмочные критерии | Статус |
+| --- | --- | --- | --- | --- |
+| T7.1 | Express bootstrap: `src/api/app.ts` (`createApp`), `GET /api/health`, `app.listen` рядом с `bot.start()` в `src/index.ts` | — | `npm run dev` поднимает бота и Express одновременно; `GET /api/health` → 200; typecheck/lint/build чистые | ✅ |
+| T7.2 | `canViewPhotos` — чистая функция доступа к просмотру, `voting.service.ts` | — | покрывает матрицу PRODUCT_SPEC.md "Просмотр фотографий" явной веткой; unit-тесты без БД | ✅ |
+| T7.3 | Валидация Telegram `initData` (HMAC-SHA256, `src/api/auth/telegram-init-data.ts`) + выдача/проверка JWT (`src/api/auth/jwt.ts`, `jsonwebtoken`, `APP_JWT_SECRET`) | — | валидная/невалидная/протухшая подпись обрабатываются корректно; JWT round-trip; unit-тесты без сети/БД | ✅ |
+| T7.4 | `POST /api/auth/telegram` + `requireAuth` мидлвар (`src/api/routes/auth.routes.ts`, `src/api/middleware/require-auth.ts`) | T7.1, T7.3 | верная роль при bootstrap (как в `/start`); 401 без/с невалидным токеном; роль перечитывается из БД на каждый запрос (D34); первый в проекте `supertest`-тест | ✅ |
+| T7.5 | `GET /api/photos`, `GET /api/nominations`, `GET /api/voting-state` | T7.4, T7.2 | гейт `canViewPhotos` на оба списка (D35); ответ по фото без `telegramFileId` | ✅ |
+| T7.6 | `GET /api/photos/:id/image` — прокси через `bot.api.getFile`, in-memory кэш `file_path` (TTL); `bot` выносится в `src/bot/bot.ts` | T7.5, T7.1 | отдаёт байты авторизованным; 403/404 корректно; `BOT_TOKEN` не попадает в браузер (D23) | ✅ |
+| T7.7 | `POST /api/votes` — тонкий роут поверх `castVote()` | T7.4 | идемпотентность (`alreadyVoted`); 403/400 по фазе/цели; без переизобретения бизнес-логики (D25) | ✅ |
+| T7.8 | `src/services/results.service.ts` — `computeResults()`, `canViewResults()` | — | детерминированный tie-break `photo.id ASC`; интеграционные тесты против Neon (тест на ничью обязателен) | ✅ |
+| T7.9 | `GET /api/results` | T7.8, T7.4 | гейт `canViewResults`; числа голосов скрыты от всех, включая ADMIN (D35) | ✅ |
+| T7.10 | Закрытие фазы — полная ручная проверка HTTP API (curl/Postman, без браузера и без Telegram) по всей матрице auth × фаза × роль | T7.1–T7.9 | чек-лист без замечаний; `npm test`/typecheck/lint/build зелёные | ✅ |
+
+Реализация: `src/api/app.ts` (`createApp({ bot })`, монтирует все роуты + JSON error-handler), `src/api/auth/{telegram-init-data,jwt}.ts`, `src/api/middleware/require-auth.ts`, `src/api/routes/{auth,voting-state,photos,nominations,votes,results}.routes.ts`, `src/api/types.d.ts` (аугментация `Express.Request.dbUser`), `src/bot/bot.ts` (общий `Bot`-инстанс, вынесен из `index.ts`), `src/services/voting.service.ts` (+`canViewPhotos`), `src/services/results.service.ts` (новый). Новые зависимости: `express`, `jsonwebtoken`, dev: `@types/express`, `@types/jsonwebtoken`, `supertest`, `@types/supertest`. `config.ts` — `apiPort` (необязательна, дефолт 3000), `appJwtSecret` (обязательна). `npm test` — 72/72 (было 40 после Phase 6), `typecheck`/`lint`/`build` чистые.
+
+### Ручная проверка — завершена 2026-08-21
+
+Полный прогон по матрице auth × фаза × роль (DRAFT/VIEWING/VOTING/FINISHED × USER/ADMIN) через `npm run dev` + fetch-скрипт, использующий реальный `BOT_TOKEN` для подписи `initData` (не сохранён в репозитории) и существующие `voting-state.service`-функции для переходов состояния (то же, что делают bot-команды). Проверено: bootstrap роли, 401 без/с невалидным/протухшим токеном, гейты `canViewPhotos`/`canViewResults` на всех 4 фазах для USER и ADMIN, идемпотентность голоса, отказ по невалидной цели голосования, отсутствие `voteCount` в `/api/results` для обеих ролей, `image-proxy` не даёт доступ без токена. Все тестовые данные (фото/номинация/пользователи) удалены после проверки, `VotingState` возвращён в исходный статус (`DRAFT`) — реальные данные пользователя из Phase 6 не затронуты.
+
+Полные формулировки по каждой задаче (что именно создавалось/переиспользовалось, тесты, ручная проверка, доклады) — см. план `soft-percolating-sky.md`, раздел "Phase 7 — HTTP API".
+
+Phase 7 закрыта. Следующий шаг — Phase 8 (Mini App frontend), по одной фазе за раз.
+
+## Phase 8 — Mini App: Frontend ⏳ Todo
+
+Начинается только после закрытия Phase 7 (закрыта). React + TypeScript + Vite (D22) поверх HTTP API из Phase 7 — отдельный npm workspace `frontend/`. Проверяется в обычном десктоп-браузере, без реального Telegram-клиента и без туннеля (ручная проверка — инъекция валидно подписанного `initData` через DevTools Local Overrides, см. DECISIONS.md D34 и уточнение в плане `8-delegated-wirth.md`). Границы фазы: только фронтенд поверх уже существующего API, без новых backend-эндпоинтов и без новых продуктовых правил; фронтенд не дублирует серверную бизнес-логику (`canViewPhotos`/`canVote`/`canViewResults` — окончательно на сервере).
+
+| ID | Задача | Зависит от | Приёмочные критерии | Статус |
+| --- | --- | --- | --- | --- |
+| T8.1 | Bootstrap frontend-воркспейса (`frontend/`, React+TS+Vite, npm workspaces, dev-прокси `/api`) | Phase 7 | `npm run dev:frontend` поднимает пустую страницу; прокси `/api/health` работает; backend-скрипты (`dev`/`test`/`typecheck`/`lint`/`build`) не задеты | ✅ |
+| T8.2 | Авторизация на фронтенде (`telegram-web-app.js`, `POST /api/auth/telegram`, JWT в React state, централизованный API-клиент `frontend/src/api/client.ts` с авто-`Authorization` и централизованной обработкой 401) | T8.1, T7.4 | успешный вход показывает роль; ошибка авторизации — видимое состояние, не пустой экран; без dev-bypass в коде | ✅ |
+| T8.3 | Просмотр фото на фронтенде (`/api/voting-state`, `/api/photos`, `/api/nominations`, image через blob URL + `revokeObjectURL`) | T8.2, T7.5, T7.6 | фото рендерятся; DRAFT/FINISHED — соответствующее сообщение; пагинация работает; без утечки blob URL | ✅ |
+| T8.4 | Голосование на фронтенде (`POST /api/votes`, идемпотентность, 403/400) | T8.3, T7.7 | голос отражается без перезагрузки; повтор не выглядит как ошибка; вне VOTING — понятное объяснение | ✅ |
+| T8.5 | Результаты на фронтенде (`GET /api/results`, top-2 без чисел, изображения тем же способом, что в T8.3) | T8.2, T7.9 | до FINISHED — сообщение; после — корректный top-2 без утечки blob URL | ✅ |
+| T8.6 | Закрытие Phase 8 — полная ручная проверка в браузере (приёмочный чек-лист, без новой функциональности) | T8.1–T8.5 | чек-лист без замечаний; `typecheck`/`lint`/`build` чистые для root и `frontend/` | ✅ |
+
+Полная разбивка задач с деталями реализации и ручной проверки — план `8-delegated-wirth.md`.
+
+Реализация T8.1: `frontend/` — воркспейс `create-vite` (React+TS+Vite, шаблон `react-ts`). Корневой `package.json` → `"workspaces": ["frontend"]`, новые прокси-скрипты `dev:frontend`/`build:frontend`/`typecheck:frontend`/`lint:frontend` (каждый — `npm run <script> -w frontend`). `frontend/package.json` получил свой `typecheck` (`tsc -b`, `noEmit` уже в `tsconfig.app.json`). `frontend/vite.config.ts` — dev-прокси `/api` → `http://localhost:<API_PORT>`, порт читается из корневого `.env` через `loadEnv` (без дублирования значения). Корневой `eslint.config.js` — `frontend/` добавлен в `ignores` (у фронтенда свой линтер, `oxlint`, из шаблона). Корневой `.gitignore` уже покрывал `frontend/node_modules`/`frontend/dist` (паттерны `node_modules/`/`dist/` без слэша матчат на любой глубине) — правок не потребовалось. Backend-скрипты (`dev`/`build`/`typecheck`/`lint`/`test`) — проверены после изменений, ведут себя как раньше (root `tsconfig.json`/`tsconfig.build.json` включают только `src/`). Проверено вручную: `npm run dev` + `npm run dev:frontend` параллельно, `curl localhost:5173/api/health` (через прокси Vite) → `{"status":"ok"}`.
+
+Реализация T8.2: `frontend/index.html` — подключён `telegram-web-app.js` в `<head>`, порядок скриптов (`telegram-web-app.js` → `main.tsx`) фиксирует, что реальный Telegram API инициализируется раньше React (см. ARCHITECTURE.md/план). `frontend/src/types/telegram-web-app.d.ts` — минимальный ambient-тип `window.Telegram.WebApp`. `frontend/src/api/client.ts` — `createApiClient({getToken, onUnauthorized})`: единая точка для всех запросов к `/api/*`, авто-`Authorization`, централизованный сброс сессии на 401. `frontend/src/auth/` — `auth-context.ts` (контекст+типы), `AuthProvider.tsx` (компонент: `fetch('/api/auth/telegram')` на маунте, JWT только в `useRef`/state, retry по требованию), `useAuth.ts` (хук) — разбито на три файла ради React Fast Refresh (устраняет lint-warning `only-export-components`). JWT нигде не пишется в `localStorage`/`sessionStorage` (D21). Серверный контракт (`POST /api/auth/telegram` → `{token, user:{id,role}}`; `requireAuth` → 401 без токена) проверен одноразовым скриптом (собирает валидный `initData` тем же HMAC-алгоритмом, что и T7.4, бьёт в реально запущенный `npm run dev`, чистит тестового пользователя) — скрипт не коммитился.
+
+Побочная находка при ручной браузерной проверке: первоначальный приём из плана (переопределить только `window.Telegram.WebApp.initData` точечно) не сработал — настоящий `telegram-web-app.js` определяет `initData` как read-only (только getter), присваивание в обычном `<script>` молча не срабатывает без ошибки в консоли. Рабочий приём — **полностью заменить** `window.Telegram` новым объектом (`{WebApp: {initData, ready(){}, expand(){}}}`) через DevTools Local Overrides, а не точечно мутировать поле существующего. Уточнение внесено в план `8-delegated-wirth.md`; остаётся чисто браузерной dev-only техникой, кода в репозитории не касается (D34). Ручная проверка (реальный Chrome, Local Overrides, `initData` подписана реальным `BOT_TOKEN` под admin `telegram_id`): успешный вход показал `Авторизован как ADMIN`; отдельно проверено состояние ошибки (испорченный `initData` → видимое сообщение об ошибке + кнопка «Повторить», не пустой экран). `typecheck`/`lint`/`build` для `frontend/` чистые (0 warnings).
+
+Реализация T8.3: `frontend/src/api/types.ts` — типы ответов API (`PhotosResponse`, `NominationsResponse`, `VotingStateResponse`, `ForbiddenBody`). `frontend/src/api/useVotingState.ts` — хук чисто для UX-подсказки (заголовок фазы), не источник истины для доступа. `frontend/src/api/useAuthorizedImage.ts` — переиспользуемый хук: авторизованный `fetch` через централизованный клиент → `Blob` → `createObjectURL`, с гарантированным `revokeObjectURL` в cleanup эффекта при смене `path`/размонтировании (переиспользуется и в T8.5). `frontend/src/photos/{PhotoCard,PhotosScreen}.tsx` — сетка фото с пагинацией (`skip`/`take`). Доступ **не дублируется на клиенте**: `PhotosScreen` не проверяет роль/фазу сама — всегда запрашивает `/api/photos`+`/api/nominations`, и именно ответ сервера (200 → сетка; 403 с `votingStatus` в теле → соответствующее сообщение) определяет, что показать; поэтому ADMIN корректно видит фото в любой фазе (включая DRAFT/FINISHED) без отдельной ветки `if (role === 'ADMIN')` во фронтенд-коде — ровно то же поведение, что даёт серверный `canViewPhotos`.
+
+Ручная проверка (реальные тестовые данные, добавленные через бота: 2 фото + 1 номинация): ADMIN видит сетку фото в DRAFT (до `/open_viewing`), VOTING и после `/stop_voting` в FINISHED — картинки рендерятся через blob URL, пагинация `1–2 из 2` корректна (кнопки Назад/Вперёд задизейблены, т.к. умещается на одной странице). USER (тестовый non-admin `telegram_id`) в FINISHED видит «Голосование завершено — доступны только результаты.» вместо сетки — 403 от `/api/photos`/`/api/nominations` с `votingStatus` корректно превращён в сообщение. `typecheck`/`lint`/`build` для `frontend/` чистые.
+
+Реализация T8.4: `frontend/src/photos/PhotoCard.tsx` — по кнопке на номинацию под каждым фото, `POST /api/votes` через централизованный клиент. Ответ `{alreadyVoted}` — идемпотентный успех (D25) рендерится как отдельное состояние («уже проголосовали»), не как ошибка; 403 → «недоступно сейчас», 400 → «невалидный выбор», прочее → «ошибка, попробуйте ещё раз». Никакой проверки «можно ли голосовать» на клиенте до отправки — решает только ответ сервера.
+
+Для ручной проверки тестовый `VotingState` пришлось напрямую (в обход обычной машины переходов, только для теста, с подтверждения пользователя) вернуть из `FINISHED` в `VOTING` — обратного перехода через сервис нет (T4.2). Ручная проверка (2 фото × 2 номинации, ADMIN): все 4 голоса поставлены через UI, отражены без перезагрузки (✓), реально записаны в Neon (сверено напрямую через Prisma) под правильным `userId`. Идемпотентность подтверждена: после перезагрузки страницы (локальный React-стейт кнопок сбрасывается) повторный клик по уже проголосованной номинации вернул `alreadyVoted:true`, показан как «(уже проголосовали)», не как сбой.
+
+Обсуждена и сознательно отложена UX-доработка: упреждающая блокировка уже проголосованных кнопок сразу при загрузке экрана (без клика) потребовала бы нового backend-эндпоинта («мои голоса»), что выходит за границы Phase 8 («никаких новых backend-эндпоинтов», см. план). Решение пользователя — не делать сейчас, возможная отдельная задача в будущем.
+
+Реализация T8.5: `frontend/src/results/ResultsScreen.tsx` — `GET /api/results` через централизованный клиент, тот же паттерн, что и в T8.3 (сервер решает через 403+`votingStatus`, фронтенд не гейтит сам). Картинки top-2 — тем же `useAuthorizedImage` (переиспользован, не продублирован). `App.tsx` — простое переключение вкладок «Фото»/«Результаты» (`useState<Tab>`).
+
+Найден и исправлен баг на границе Phase 7/Phase 8 (см. DECISIONS.md D36): `GET /api/photos/:id/image` был гейтирован только `canViewPhotos`, которая явно запрещает USER доступ в FINISHED — той самой фазе, в которой USER впервые получает доступ к результатам (`canViewResults`). Из-за этого USER видел текст результатов, но не фото (пустые серые плейсхолдеры), хотя ADMIN видел всё корректно (у ADMIN обе матрицы всегда `true`, поэтому баг не проявлялся в ручной проверке Phase 7 T7.10). Исправлено точечно: гейт роута — `canViewPhotos(...) || canViewResults(...)` (обе уже существующие чистые функции переиспользованы, новой бизнес-логики не добавлено); поведение DRAFT/VIEWING/VOTING не изменилось. Правка согласована с пользователем как обоснованное исключение из границы «Phase 8 не трогает backend» — это не новый эндпоинт, а починка контракта уже существующего.
+
+Ручная проверка (реальные тестовые данные, `VotingState` переведён в `FINISHED` через `/stop_voting`): ADMIN и USER оба видят top-2 по обеим номинациям («Секс», «Ляля») с картинками (после фикса гейта) и без чисел голосов, в полном соответствии с 4 голосами, поставленными в T8.4. `typecheck`/`lint`/`build` для `frontend/` и backend (после правки гейта) чистые.
+
+### Ручная проверка — завершена 2026-08-21 (T8.6)
+
+За сессию Phase 8 вживую (реальный Chrome, DevTools Local Overrides — см. D34, техника подмены `initData` уточнена по ходу T8.2) пройдено:
+
+- **Авторизация:** успешный вход (ADMIN) с показом роли; состояние ошибки (`initData` не найден/испорчен) — видимое сообщение + кнопка «Повторить», не пустой экран.
+- **Просмотр фото:** ADMIN — сетка с картинками во всех трёх достигнутых фазах (DRAFT до `/open_viewing`, VOTING, FINISHED — ADMIN видит всегда); USER — сообщение «Голосование завершено…» в FINISHED, картинки корректно не запрашивались. Пагинация (`skip`/`take`) отрендерена корректно (при 2 фото кнопки Назад/Вперёд задизейблены).
+- **Голосование:** 4 голоса (2 фото × 2 номинации) поставлены через UI ADMIN'ом, отражены без перезагрузки, реально записаны в Neon; идемпотентность подтверждена (повторный клик после перезагрузки → «уже проголосовали», не ошибка).
+- **Результаты:** ADMIN и USER (после FINISHED) видят одинаковый top-2 по обеим номинациям, без чисел голосов; картинки — тем же blob-URL механизмом.
+- **Найден и исправлен побочный баг** (не относится к новой функциональности T8.1–T8.5, всплыл только при её ручной проверке) — гейт `/api/photos/:id/image` не пускал USER к фото из результатов в FINISHED; исправлено, см. DECISIONS.md D36.
+
+Не проверено вживую в браузере (полагаемся на код-ревью + уже пройденную в Phase 7 T7.10 полную curl-матрицу auth×фаза×роль, поскольку `VotingState` — синглтон и необратимо дошёл до FINISHED в ходе тестирования T8.3–T8.5): USER в фазах DRAFT/VIEWING для экрана фото (код идентичен уже проверенной ветке USER+FINISHED — тот же компонент, та же функция `forbiddenMessage`, отличается только текст по `votingStatus` из ответа сервера) и явная проверка отсутствия утечки blob URL через DevTools Memory profiler (полагаемся на корректность `revokeObjectURL` в cleanup эффекта, подтверждённую чтением кода `useAuthorizedImage`).
+
+`npm test` (72/72), `typecheck`/`lint`/`build` — чистые для root и `frontend/` (0 warnings). Код Phase 8 не закоммичен — коммит и пуш по решению пользователя.
+
+Phase 8 закрыта.
+
+## Phase 9 — Mini App: запуск внутри реального Telegram ⏳ Todo
+
+Начинается только после закрытия Phase 8. Продакшен-сборка `frontend/dist` статикой из Express (D22), кнопка запуска Mini App в боте (`web_app`, `MINI_APP_URL`). `cloudflared` — разовый инструмент ручной E2E-проверки на этом этапе, не часть архитектуры (см. DECISIONS.md D33). Задачи (T9.1–T9.3) не переносятся сюда до начала фазы — см. план `soft-percolating-sky.md`, раздел "Phase 9".
 
 ---
 
@@ -148,6 +233,6 @@ Phase 6 закрыта. Следующий шаг — Phase 7 (Telegram Mini App
 - точные правила голосования (сколько разных фото можно выбрать в одной номинации);
 - можно ли отозвать/изменить голос — сама возможность не отбрасывается, `voting.service`/API проектируются так, чтобы replace/cancel можно было добавить позже без переделки контракта (см. DECISIONS.md D25), но не реализуется, пока не решено правило про количество фото;
 - финальный UI каталога/просмотра/голосования (грид/список/карточки — экспериментировать в Phase 7);
-- полноценный `results.service` под финализированные правила (базовая версия — TOP-2, tie-break `photo.id ASC` — запланирована в T7.11);
+- полноценный `results.service` под финализированные правила (базовая версия — TOP-2, tie-break `photo.id ASC` — запланирована в T7.8);
 - выбор хостинга для постоянно работающего процесса;
 - CI (GitHub Actions) для typecheck/lint/tests — не настроено.

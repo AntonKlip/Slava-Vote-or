@@ -1,6 +1,6 @@
 # Архитектура — Slava Vote
 
-Статус: живой документ. Последнее обновление: 2026-08-20. Продуктовые правила — см. [PRODUCT_SPEC.md](./PRODUCT_SPEC.md), история решений с обоснованиями — [DECISIONS.md](./DECISIONS.md).
+Статус: живой документ. Последнее обновление: 2026-08-21. Продуктовые правила — см. [PRODUCT_SPEC.md](./PRODUCT_SPEC.md), история решений с обоснованиями — [DECISIONS.md](./DECISIONS.md).
 
 ## Стек
 
@@ -27,6 +27,7 @@ Handlers не содержат бизнес-логику — только при
 ```text
 src/
 ├── bot/
+│   ├── bot.ts                    (общий экземпляр Bot — переиспользуется index.ts и api/)
 │   ├── commands/
 │   ├── handlers/
 │   ├── keyboards/
@@ -36,8 +37,16 @@ src/
 │   ├── user.service.ts
 │   ├── voting-state.service.ts   (было contest.service — переименовано, см. DECISIONS.md D8)
 │   ├── photo.service.ts
-│   ├── voting.service.ts         (canVote + запись голоса)
-│   └── results.service.ts
+│   ├── nomination.service.ts
+│   ├── voting.service.ts         (canVote/canViewPhotos + запись голоса)
+│   ├── voting-permission.service.ts
+│   └── results.service.ts        (computeResults, canViewResults — Phase 7)
+│
+├── api/                           (HTTP API, Express — Phase 7, см. раздел "HTTP API" ниже)
+│   ├── app.ts                     (createApp({ bot }))
+│   ├── auth/                      (telegram-init-data.ts, jwt.ts)
+│   ├── middleware/require-auth.ts
+│   └── routes/                    (auth, voting-state, photos, nominations, votes, results)
 │
 ├── middleware/
 │   └── permissions.ts
@@ -49,11 +58,56 @@ src/
 
 prisma/
 └── schema.prisma
+
+frontend/                            (npm workspace, Phase 8, см. раздел "Frontend" ниже)
+├── index.html
+├── vite.config.ts                   (dev-прокси /api → backend, порт из корневого .env)
+└── src/
+    ├── main.tsx
+    └── App.tsx
 ```
 
-Реализовано на данный момент (после Phase 6, T6.1–T6.5): `config/`, `database/prisma.ts`, `bot/context.ts`, `middleware/permissions.ts`, `bot/handlers/{start,photo-add}.handler.ts`, `bot/commands/{voting-state,voting-permission,nomination,photo}.commands.ts`, `services/{user,voting-state,voting-permission,voting,photo,nomination}.service.ts`, `index.ts` (регистрирует все команды). `services/results.service.ts`, `api/`, `frontend/` — появятся в Phase 7, см. [TASKS.md](./TASKS.md).
+Реализовано на данный момент (после Phase 7, T7.1–T7.10, и Phase 8, T8.1–T8.6): всё из Phase 6 (`config/`, `database/prisma.ts`, `bot/context.ts`, `middleware/permissions.ts`, `bot/handlers/*`, `bot/commands/*`, `services/{user,voting-state,voting-permission,voting,photo,nomination}.service.ts`) плюс `bot/bot.ts`, `services/results.service.ts`, `api/` (Express HTTP API поверх тех же `services/`, см. ниже) и полностью рабочий `frontend/` (React+TS+Vite): авторизация через Telegram `initData`, просмотр фото по фазам, голосование, результаты — все экраны проверены вручную в браузере (Phase 8, T8.1–T8.6, DevTools Local Overrides вместо реального Telegram, см. ниже).
 
-С Phase 7 (Telegram Mini App, см. DECISIONS.md D19–D25) поверх этих же `services/` появится HTTP API-слой (`src/api/`, Express) и отдельный фронтенд (`frontend/`, React+Vite), работающие в том же Node-процессе, что и бот. Бот остаётся точкой входа и интерфейсом администратора; подробности — в DECISIONS.md.
+Запуск внутри реального Telegram (Phase 9) — следующая фаза (см. DECISIONS.md D33). Express (`src/api/app.ts`) работает в том же Node-процессе, что и бот (`bot.start()` и `app.listen()` — оба в `src/index.ts`). Бот остаётся точкой входа и интерфейсом администратора.
+
+## Frontend (Phase 8)
+
+`frontend/` — отдельный npm workspace (корневой `package.json` → `"workspaces": ["frontend"]`, см. DECISIONS.md D22), React + TypeScript + Vite, обычный CSS без UI-кита (финальный визуал не определён, см. PRODUCT_SPEC.md TBD). Инструментарий фронтенда (сборка, typecheck, lint через `oxlint`) полностью независим от корневого `tsconfig.json`/`eslint.config.js` — backend-скрипты (`dev`, `build`, `typecheck`, `lint`, `test`) не задевают `frontend/` и наоборот; корневые прокси-скрипты `dev:frontend`/`build:frontend`/`typecheck:frontend`/`lint:frontend` явно вызывают воркспейс (`npm run <script> -w frontend`).
+
+В dev-режиме `frontend/vite.config.ts` проксирует `/api/*` на `http://localhost:<API_PORT>` (та же переменная, что читает backend, значение подтягивается из корневого `.env` через `loadEnv`) — CORS не нужен уже на этапе разработки. В проде (Phase 9) `frontend/dist` будет отдаваться тем же Express-процессом с того же origin, что и API.
+
+Локальная разработка запускается двумя параллельными процессами: `npm run dev` (бот + Express, backend) и `npm run dev:frontend` (Vite).
+
+**Структура `frontend/src/`:** `auth/` (`auth-context.ts`, `AuthProvider.tsx`, `useAuth.ts` — разбито на три файла ради React Fast Refresh; JWT только в `useRef`/React state, никогда в `localStorage`, D21), `api/` (`client.ts` — централизованный клиент: авто-`Authorization`, единая обработка 401; `types.ts`; `useVotingState.ts`, `useAuthorizedImage.ts` — переиспользуемые хуки), `photos/` (`PhotosScreen.tsx`, `PhotoCard.tsx` — просмотр + голосование), `results/` (`ResultsScreen.tsx` — top-2 без чисел голосов), `types/telegram-web-app.d.ts` (ambient-тип `window.Telegram.WebApp`).
+
+Ключевой принцип фронтенда: **доступ не дублируется на клиенте**. `PhotosScreen`/`ResultsScreen` не проверяют роль или фазу голосования сами — всегда делают запрос, а ответ сервера (200 → данные; 403 с `votingStatus` в теле → сообщение) определяет, что показать. Это даёт корректное поведение (например, ADMIN видит фото в любой фазе) без отдельных `if (role === 'ADMIN')` веток во фронтенд-коде — ровно то же самое, что делает `canViewPhotos`/`canViewResults` на сервере.
+
+**Ручная проверка Mini App без реального Telegram-клиента** — через DevTools Local Overrides (Phase 8, T8.2). Рабочий приём: **полностью заменить** `window.Telegram` целым объектом (`{WebApp: {initData, ready(){}, expand(){}}}`), вставленным между `<script src="telegram-web-app.js">` и `<script type="module" src="/src/main.tsx">` в локально переопределённом `index.html`. Точечное присваивание `window.Telegram.WebApp.initData = '...'` **не работает** — настоящий `telegram-web-app.js` определяет `initData` как read-only (только getter), и такое присваивание в обычном `<script>` молча игнорируется без ошибки в консоли. Это чисто браузерная dev-only техника, кода в репозитории не касается — сервер как проверяет HMAC-подпись `initData`, так и продолжает.
+
+## HTTP API (Phase 7)
+
+Тонкий слой поверх `services/`: парсинг запроса → вызов сервиса → маппинг результата/ошибки в HTTP. Никакой бизнес-логики не дублируется — `canVote`/`castVote`/`canViewPhotos`/`canViewResults` вызываются напрямую.
+
+| Метод и путь | Гейт (сверх requireAuth) | Сервис |
+| --- | --- | --- |
+| `POST /api/auth/telegram` | — (сам выдаёт JWT) | `user.service.upsertUserFromTelegram` |
+| `GET /api/voting-state` | любой авторизованный | `voting-state.service.getOrCreateVotingState` |
+| `GET /api/photos` | `canViewPhotos` | `photo.service.listActive` |
+| `GET /api/photos/:id/image` | `canViewPhotos` ИЛИ `canViewResults` (см. DECISIONS.md D36) | `photo.service.getById` + `bot.api.getFile` (прокси) |
+| `GET /api/nominations` | `canViewPhotos` (D35 — тот же гейт, что у фото) | `nomination.service.listActive` |
+| `POST /api/votes` | (внутри `castVote`, свой `canVote`) | `voting.service.castVote` |
+| `GET /api/results` | `canViewResults` | `results.service.computeResults` |
+
+Все роуты, кроме `/api/auth/telegram` и `/api/health`, защищены мидлваром `requireAuth` (`src/api/middleware/require-auth.ts`).
+
+## Аутентификация Mini App
+
+Фронтенд при каждом открытии Mini App читает `window.Telegram.WebApp.initData` и отправляет на `POST /api/auth/telegram`. Сервер валидирует HMAC-подпись Telegram (`src/api/auth/telegram-init-data.ts`, ключ — `BOT_TOKEN`, алгоритм `secret = HMAC_SHA256("WebAppData", botToken)`, `hash = HMAC_SHA256(secret, data_check_string)`) и свежесть `auth_date` (по умолчанию не старше 24ч); при успехе — `user.service.upsertUserFromTelegram` (без изменений) получает/создаёт `User` и выдаёт короткоживущий JWT (`src/api/auth/jwt.ts`, `jsonwebtoken`, TTL 2ч, секрет — `APP_JWT_SECRET`).
+
+JWT-payload содержит только `userId` — не роль. `requireAuth` перечитывает `User` из Prisma по `id` на каждый защищённый запрос (DECISIONS.md D34), поэтому смена роли ADMIN действует немедленно, не дожидаясь истечения токена. Клиент никогда не передаёт `telegramId`/`userId`/`role` в теле запроса для определения личности — только `Authorization: Bearer <JWT>`.
+
+Dev-режим с подменным логином (без реального `initData`) сознательно не реализован (D34) — локальная проверка фронтенда в Phase 8 идёт через инъекцию валидно подписанного `initData` в `window.Telegram.WebApp` через devtools console, не через код в репозитории.
 
 ## Модель данных
 
@@ -105,6 +159,8 @@ VotingState  (одна строка на всё приложение: DRAFT/VIEW
 
 Файлы не хранятся в собственном сторадже и не кладутся в PostgreSQL как бинарные данные. Используются `telegram_file_id` (повторная отправка) и `telegram_file_unique_id` (идентификация). Архитектура должна допускать в будущем переход на S3-совместимое хранилище (R2/S3) без изменения остальной бизнес-логики.
 
+Mini App получает изображения через серверный прокси `GET /api/photos/:id/image` (`src/api/routes/photos.routes.ts`, D23): `telegram_file_id → file_path` резолвится через `bot.api.getFile`, результат кэшируется в памяти процесса (`Map<telegramFileId, {filePath, expiresAt}>`, TTL ~50 минут — с запасом от ~1ч валидности `file_path` у Telegram), сами байты запрашиваются у `api.telegram.org` и отдаются одним буферизованным ответом (не потоковым — фото из Telegram некрупные, буферизация проще потокового пайплайна и не требует межпотоковой стыковки Web/Node Streams). `BOT_TOKEN` никогда не попадает в браузер.
+
 ## Окружение и хостинг
 
 | Переменная | Назначение |
@@ -112,6 +168,8 @@ VotingState  (одна строка на всё приложение: DRAFT/VIEW
 | `BOT_TOKEN` | токен бота от @BotFather |
 | `DATABASE_URL` | connection string PostgreSQL (Neon) |
 | `ADMIN_TELEGRAM_IDS` | telegram_id первых администраторов, через запятую |
+| `API_PORT` | порт Express HTTP API (Phase 7); необязательна, по умолчанию `3000` |
+| `APP_JWT_SECRET` | секрет для подписи session-JWT Mini App (Phase 7, D21/D34) |
 
 - БД — Neon (бесплатный тариф), используется и для разработки, и в будущем для продакшена — без Docker/локального Postgres (см. DECISIONS.md D4). `DATABASE_URL` хранится только у пользователя, никогда не передаётся в чат.
 - Бот — long polling (не нужен публичный HTTPS endpoint). Конкретный хостинг для постоянно работающего Node.js-процесса — TBD (VPS/Railway/Render — не выбрано).
@@ -119,4 +177,6 @@ VotingState  (одна строка на всё приложение: DRAFT/VIEW
 
 ## Тестирование
 
-Vitest. Обязательное покрытие критической бизнес-логики до создания сложного UI: RBAC, машина состояний голосования, `canVote`, individual permissions, запрет голосования после `FINISHED`, уникальность голосов, детерминированность результатов при ничьей.
+Vitest. Обязательное покрытие критической бизнес-логики до создания сложного UI: RBAC, машина состояний голосования, `canVote`/`canViewPhotos`/`canViewResults`, individual permissions, запрет голосования после `FINISHED`, уникальность голосов, детерминированность результатов при ничьей (`photo.id ASC`, покрыто в `results.service.test.ts`).
+
+Роуты HTTP API (Phase 7) намеренно не получают отдельных тестов — они тонкие (парсинг + вызов уже протестированного сервиса + маппинг ошибки в статус). Единственное исключение — `POST /api/auth/telegram` + `requireAuth` (`src/api/routes/auth.routes.test.ts`, `supertest`): это новая security-граница (валидация `initData`, выдача/проверка JWT), а не проброс к существующей бизнес-логике, поэтому решено покрыть отдельно (DECISIONS.md D33).
