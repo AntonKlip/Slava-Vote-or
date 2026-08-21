@@ -21,4 +21,6 @@ export const config = {
   botToken: required('BOT_TOKEN'),
   databaseUrl: required('DATABASE_URL'),
   adminTelegramIds: parseAdminIds(process.env.ADMIN_TELEGRAM_IDS),
+  apiPort: Number(process.env.API_PORT ?? 3000),
+  appJwtSecret: required('APP_JWT_SECRET'),
 };

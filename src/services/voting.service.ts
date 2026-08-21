@@ -39,6 +39,22 @@ export function canVote(
   }
 }
 
+/**
+ * Право просмотра фото/номинаций — отдельная от canVote проверка (см. PRODUCT_SPEC.md
+ * "Просмотр фотографий", DECISIONS.md D27). ADMIN — доступ всегда, независимо от фазы.
+ */
+export function canViewPhotos(user: Pick<User, 'role'>, votingState: Pick<VotingState, 'status'>): boolean {
+  if (user.role === UserRole.ADMIN) return true;
+  switch (votingState.status) {
+    case VotingStatus.VIEWING:
+    case VotingStatus.VOTING:
+      return true;
+    case VotingStatus.DRAFT:
+    case VotingStatus.FINISHED:
+      return false;
+  }
+}
+
 export async function canUserVoteNow(user: User): Promise<boolean> {
   const votingState = await prisma.votingState.upsert({
     where: { id: VOTING_STATE_SINGLETON_ID },

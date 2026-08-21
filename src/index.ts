@@ -1,6 +1,6 @@
-import { Bot } from 'grammy';
 import { config } from './config/config.js';
-import type { MyContext } from './bot/context.js';
+import { bot } from './bot/bot.js';
+import { createApp } from './api/app.js';
 import { attachDbUser, requireRole } from './middleware/permissions.js';
 import { UserRole } from './generated/prisma/enums.js';
 import { handleStart } from './bot/handlers/start.handler.js';
@@ -17,8 +17,7 @@ import {
   handleDeactivateNomination,
 } from './bot/commands/nomination.commands.js';
 import { handleListPhotos, handleDeletePhoto } from './bot/commands/photo.commands.js';
-
-const bot = new Bot<MyContext>(config.botToken);
+import { USER_COMMANDS } from './bot/commands/menu.commands.js';
 
 bot.use(attachDbUser);
 
@@ -39,4 +38,10 @@ bot.catch((err) => {
   console.error('Bot error:', err);
 });
 
+const app = createApp({ bot });
+app.listen(config.apiPort, () => {
+  console.log(`HTTP API listening on port ${config.apiPort}`);
+});
+
+await bot.api.setMyCommands(USER_COMMANDS);
 bot.start();

@@ -3,7 +3,7 @@ import { prisma } from '../database/prisma.js';
 import { PhotoStatus, UserRole, VotingStatus } from '../generated/prisma/enums.js';
 import type { Nomination, Photo, User } from '../generated/prisma/client.js';
 import { VOTING_STATE_SINGLETON_ID, stopVoting } from './voting-state.service.js';
-import { canVote, castVote, InvalidVoteTargetError, VotingNotAllowedError } from './voting.service.js';
+import { canVote, canViewPhotos, castVote, InvalidVoteTargetError, VotingNotAllowedError } from './voting.service.js';
 
 describe('canVote — матрица прав (чистая функция, без БД)', () => {
   const user = (role: UserRole) => ({ role });
@@ -31,6 +31,31 @@ describe('canVote — матрица прав (чистая функция, бе
     expect(canVote(user(UserRole.USER), state(VotingStatus.FINISHED), false)).toBe(false);
     expect(canVote(user(UserRole.USER), state(VotingStatus.FINISHED), true)).toBe(false);
     expect(canVote(user(UserRole.ADMIN), state(VotingStatus.FINISHED), false)).toBe(false);
+  });
+});
+
+describe('canViewPhotos — матрица доступа к просмотру (чистая функция, без БД)', () => {
+  const user = (role: UserRole) => ({ role });
+  const state = (status: VotingStatus) => ({ status });
+
+  it('DRAFT: только ADMIN', () => {
+    expect(canViewPhotos(user(UserRole.USER), state(VotingStatus.DRAFT))).toBe(false);
+    expect(canViewPhotos(user(UserRole.ADMIN), state(VotingStatus.DRAFT))).toBe(true);
+  });
+
+  it('VIEWING: USER и ADMIN', () => {
+    expect(canViewPhotos(user(UserRole.USER), state(VotingStatus.VIEWING))).toBe(true);
+    expect(canViewPhotos(user(UserRole.ADMIN), state(VotingStatus.VIEWING))).toBe(true);
+  });
+
+  it('VOTING: USER и ADMIN', () => {
+    expect(canViewPhotos(user(UserRole.USER), state(VotingStatus.VOTING))).toBe(true);
+    expect(canViewPhotos(user(UserRole.ADMIN), state(VotingStatus.VOTING))).toBe(true);
+  });
+
+  it('FINISHED: только ADMIN', () => {
+    expect(canViewPhotos(user(UserRole.USER), state(VotingStatus.FINISHED))).toBe(false);
+    expect(canViewPhotos(user(UserRole.ADMIN), state(VotingStatus.FINISHED))).toBe(true);
   });
 });
 
